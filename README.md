@@ -82,8 +82,66 @@ class BackOfBook
    Storage _storage;
 };
 
-template<EqualityComparable ID, typenme OrderStateStorage = std::unordered_map<ID,Order>>
-using  OrderStateStorage_t = OrderStateStorage;
+template<EqualityComparable ID, typenme Storage = std::unordered_map<ID,Order>>
+using  OrderStateStorage = Storage;
+
+template<size_t size, typename SPSC_Lock_Free_Queue_t = some_jazz_from_some_lib<size, OrderUpdate>>
+using SPSC_Lock_Free_Queue = SPSC_Lock_Free_Queue_t;
+
+class JazzyOrderBook
+{
+  public:
+    JazzyOrderBook(const StaticData& sd):_sd(sd)
+   {
+      _backThread(_runBckBook);
+     _backThread.run();
+   }
+    template<typename T>
+   void AddOrder(T && order)
+   {
+   Guard g(_lock);
+   stateStorage.update_order(std::forward<T>(order));
+   Tick tickPrice = convert_to_tock(order.price);
+    if(check side && tickPrice >= end_orderbook_price) //price better than the end of the top of book size
+     {
+        update volume in top of book;
+       
+     }
+     else
+     {
+       _q.push_bck(std::forward<T>(order));
+     }
+   }
+
+    //other accessorys blaah blah ...
+  private:
+    void _runBackBook()
+    {
+      pin to core on same L2 cache
+      while(true)
+      {
+        Order order;
+        while(q.pop_front(order))
+        {
+           update volume in back of book.
+
+          if(front book has moved too far up or down)
+            break;
+        }
+        Guard g(_lock);
+        generate new front of book.
+        swap it in;
+      }
+    }
+
+   std::tread _backThread;
+   spin_lock_type _lock;
+   SPSC_Lock_Free_Queue _q;
+   StaticData _sd;
+   TopOfBook _top;
+   BackOfBoo _back;
+   OrderStateStorage _stateStorge;
+};
 ```
  
 ```mermaid
