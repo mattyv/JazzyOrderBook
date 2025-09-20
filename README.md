@@ -17,7 +17,15 @@ do this by:<br/>
 enum class UpdteType { INSERT, MODIFY, DELETE, UNKNOWN };
 enum class Side { BUY, SELL, UNKNOWN };
 
-using OrderID = char[12];
+template <typename T>
+concept EqualityComparable = requires(const std::remove_reference_t<T>& a,
+                                     const std::remove_reference_t<T>& b) {
+    { a == b } -> std::convertible_to<bool>;
+    { b == a } -> std::convertible_to<bool>; // symmetry
+};
+
+using Tick = unsigned;
+
 struct Price
 {
  unsigned price
@@ -37,6 +45,7 @@ struct StaticData
   short tick_size;
 };
 
+template<EqualityComparable OrderID>
 struct Order
 {
  OrderID id;
@@ -46,10 +55,35 @@ struct Order
 };
 struct OrderEntyLevel
 {
-  unsigned ticks;
+  Tick ticks;
   unsinged qty;
   Side side;
 };
+
+template<size_t size, typename Storage = beman::inplace_vector<OrderEntyLevel, size>>
+class TopOfBook
+{
+ public:
+   TopOfBOok(const StaticData& sd)
+    {
+      //initialise storage range and base based off sttic data range
+    }
+
+    //accessors blah blah blah
+ private:
+  Storage _storage;
+};
+
+template<size_t initialSize, typename compare, typename Storage = std::map<Tick, OrderEntryLevel, compare>>
+class BackOfBook
+{
+ //accessors blah blah blah
+  private:
+   Storage _storage;
+};
+
+template<EqualityComparable ID, typenme OrderStateStorage = std::unordered_map<ID,Order>>
+using  OrderStateStorage_t = OrderStateStorage;
 ```
  
 ```mermaid
