@@ -14,10 +14,41 @@ do this by:<br/>
 
 ***Rough layout***
 ```cpp
+enum class UpdteType { INSERT, MODIFY, DELETE, UNKNOWN };
+enum class Side { BUY, SELL, UNKNOWN };
 
-struct OrderEnty
+using OrderID = char[12];
+struct Price
 {
+ unsigned price
+ short dp;
+};
 
+struct OrderUpdate
+{
+ UpdateType updateType;
+ Price price;
+ unsigned qty;
+ Side side;
+};
+struct StaticData
+{
+  Price high, low, close;
+  short tick_size;
+};
+
+struct Order
+{
+ OrderID id;
+ unsigned ticks;
+ unsigned qty;
+ Side side;
+};
+struct OrderEntyLevel
+{
+  unsigned ticks;
+  unsinged qty;
+  Side side;
 };
 ```
  
