@@ -129,8 +129,8 @@ class JazzyOrderBook
             break;
         }
         Guard g(_lock);
-        generate new front of book.
-        swap it in;
+        generate new front of book.kinda like a rehash to centre the book.
+        update meta data about end of end of top of book tick values.
       }
     }
 
