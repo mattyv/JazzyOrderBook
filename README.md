@@ -75,18 +75,50 @@ class TopOfBook
       _upper = base + (size/2);
     }
 
-    //accessors blah blah blah
+    void update_order_at_level(const OrderUpdate& update, unsigned oldQty)
+   {
+      const auto priceTick = convetToPriceTick(update.price);
+      const auto index = calc index off _base; //too tired to think about this. but assume base is the middle of the array and base contains the base tick value.
+       auto& qty = _storage[priceTick]
+       swtich(updte.updateTyp)
+       {
+         case NEW:
+           qty+= update.qty;
+              brek;
+         case MODIFY:
+            qty -= oldQty;
+            qty+= update.qty;
+            break;
+         case DELETE:
+            qty -= oldQty;
+            brek;
+         case UNKNOWN:
+         default:
+           do someting
+       }
+
+        //mark biitset at tick index;
+
+           
+    }
+
+      //iterators using overlay. Do iterators for whole TOP of book as well as in bid order and ask order.
+      //getters on BBO      
+
+    //accessors and inserters blah blah blah
  private:
   Storte _storage;
   int _base;
   int _lower;
   int _upper;
+  int _bb, bo; //best bid best offer tick values;
+  std::bitset<size> overlay;
 };
 
 template<size_t initialSize, typename compare, typename Storage = std::map<Tick, OrderEntryLevel, compare>>
 class BackOfBook
 {
- //accessors blah blah blah
+ //accessors and inserters blah blah blah
   private:
    Storage _storage;
 };
@@ -108,12 +140,12 @@ class SPSC_Lock_Free_Queue
 
    auto pop_front()
    {
-      auto rebasing = _is_rebsing.load(MEMORY_ORDER_ACQUIRE); //pretty sure its acquire
-      if(rebasing)
+      auto rebasing = _rebaseOffset.load(MEMORY_ORDER_ACQUIRE); //pretty sure its acquire
+      if(rebasing > 0)
       {
           auto elem = _queue.pop_front();
           if(--_rebase_size_count) 
-            _is_rebasing.store(0, MEMORY_ORDER_RELEASE); //pretty sure its release
+            _rebaseOffset.store(0, MEMORY_ORDER_RELEASE); //pretty sure its release
        }
    }
 
@@ -125,8 +157,10 @@ class SPSC_Lock_Free_Queue
   SPSC_Lock_Free_Queue_t _queue;
   std::atomic<int> _rebaseOffset{0};
   size_t _rebase_size_count_down;
-  BaseDetais _baseDetails;
 };
+
+auto convert_to_tick(......)
+{}
 
 class JazzyOrderBook
 {
@@ -140,7 +174,7 @@ class JazzyOrderBook
    void AddOrder(T && orderUpadte)
    {
    Order order = stateStorage.update_order(std::forward<T>(order)); //updates order status based on ID
-   Tick tickPrice = convert_to_tock(order.price);
+   Tick tickPrice = convert_to_tick(order.price);
     if(check side && tickPrice >= end_orderbook_price || (_queue.isRebasing() && tickPrice inside high/low and rebase offset)) //price better than the end of the top of book size
      {
        _top.update_order_at_level(update);
@@ -170,6 +204,7 @@ class JazzyOrderBook
     }
 
    std::tread _backThread;
+  BaseDetais _baseDetails;
    SPSC_Lock_Free_Queue _q;
    StaticData _sd;
    TopOfBook _top;
