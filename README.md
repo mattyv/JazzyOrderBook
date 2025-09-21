@@ -12,6 +12,11 @@ do this by:<br/>
 - *Possible Enhancement*
     - ...
 
+***Phased Implementation**<br/>
+- Phase 1 - replicate details from git hub talk. I.e. just the top of book. single threaded and discard all updates outside of window. No rebasing
+- Phase 2 - add extensions. Offline of back of book stuff.
+- Phase 3 - rebasing.
+
 ***Rough layout***
 ```cpp
 enum class UpdteType { INSERT, MODIFY, DELETE, UNKNOWN };
