@@ -65,9 +65,10 @@ template<size_t size, typename Storage = beman::inplace_vector<OrderEntyLevel, s
 class TopOfBook
 {
  public:
-   TopOfBOok(const StaticData& sd)
+   TopOfBOok(const StaticData& sd, double expectedUpDownVariation)
     {
       //initialise storage range and base based off sttic data range
+      //well rely on the concept of working set size here a bit so TopOfBook range will be a smaller subset of a quite large array so we don't have to reallocate
     }
 
     //accessors blah blah blah
@@ -86,13 +87,14 @@ class BackOfBook
 template<EqualityComparable ID, typenme Storage = std::unordered_map<ID,Order>>
 using  OrderStateStorage = Storage;
 
-struct BaseDetails
+struct BaseDetails //move ownsership to TopOfBook
 {
   int base;
   int lower;
   int upper;
 
-  //rebase details
+  //rebase details.
+// move into queue
   int rebaseOffset;
 };
 
@@ -113,7 +115,8 @@ class SPSC_Lock_Free_Queue
       if(rebasing)
       {
           auto elem = _queue.pop_front();
-          --_rebase_size_count;
+          if(--_rebase_size_count) 
+            _is_rebasing.store(false, MEMORY_ORDER_RELEASE); //pretty sure its release
        }
    }
 
@@ -144,7 +147,9 @@ class JazzyOrderBook
    Tick tickPrice = convert_to_tock(order.price);
     if(check side && tickPrice >= end_orderbook_price) //price better than the end of the top of book size
      {
-        update volume in top of book;
+       if(_queue.isRebasing())
+       //WIP
+       // update volume in top of book;
        
      }
      else
