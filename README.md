@@ -8,12 +8,12 @@
 to replicate and if possibl improve on the order book ideas describe in cpp con video<br/>
 do this by:<br/>
 - *Replicatiopn*
-    - ...
+    - Phase 1
 - *Possible Enhancement*
-    - ...
+    - Phases 2 & 3
 
 ***Phased Implementation**<br/>
-- Phase 1 - replicate details from git hub talk. I.e. just the top of book. single threaded and discard all updates outside of window. No rebasing
+- Phase 1 - replicate details from cpp con talk. I.e. just the top of book. single threaded and discard all updates outside of window. No rebasing
 - Phase 2 - add extensions. Offline of back of book stuff.
 - Phase 3 - rebasing.
 
