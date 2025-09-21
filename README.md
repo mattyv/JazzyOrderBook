@@ -61,19 +61,26 @@ struct OrderEntyLevel
   //std::atomic<unsigned long> rebase_last_seen_sequence; may no need
 };
 
-template<size_t size, typename Storage = beman::inplace_vector<OrderEntyLevel, size>>
+template<int size, typename Storage = beman::inplace_vector<OrderEntyLevel, size>>
 class TopOfBook
 {
  public:
-   TopOfBOok(const StaticData& sd, double expectedUpDownVariation)
+   TopOfBOok(const StaticData& sd, double expectedUpDownVariation) :base(sd.close)
     {
       //initialise storage range and base based off sttic data range
       //well rely on the concept of working set size here a bit so TopOfBook range will be a smaller subset of a quite large array so we don't have to reallocate
+      auto total_size = size + ((high - low) * (1.0 * expectedUpDownVariation));
+      _storage.resize(total_size);
+      _lower = base - (size / 2);
+      _upper = base + (size/2);
     }
 
     //accessors blah blah blah
  private:
-  Storage _storage;
+  Storte _storage;
+  int _base;
+  int _lower;
+  int -upper;
 };
 
 template<size_t initialSize, typename compare, typename Storage = std::map<Tick, OrderEntryLevel, compare>>
@@ -87,16 +94,7 @@ class BackOfBook
 template<EqualityComparable ID, typenme Storage = std::unordered_map<ID,Order>>
 using  OrderStateStorage = Storage;
 
-struct BaseDetails //move ownsership to TopOfBook
-{
-  int base;
-  int lower;
-  int upper;
 
-  //rebase details.
-// move into queue
-  int rebaseOffset;
-};
 
 template<size_t size, typename SPSC_Lock_Free_Queue_t = some_jazz_from_some_lib<size, OrderUpdate>>
 class SPSC_Lock_Free_Queue 
@@ -104,9 +102,8 @@ class SPSC_Lock_Free_Queue
   //accessors 'n shiz
   void startRebasing(int baseOffset)
   {
-     _baseDetails.rebaseOffset = baseOffset;
      _rebase_size_count_down = _queue.size();
-     _is_rebasing.store(true, MEMORY_ORDER_RELEASE); //pretty sure its release
+     _is_rebasing.store(baseOffset, MEMORY_ORDER_RELEASE); //pretty sure its release
    }
 
    auto pop_front()
@@ -116,17 +113,17 @@ class SPSC_Lock_Free_Queue
       {
           auto elem = _queue.pop_front();
           if(--_rebase_size_count) 
-            _is_rebasing.store(false, MEMORY_ORDER_RELEASE); //pretty sure its release
+            _is_rebasing.store(0, MEMORY_ORDER_RELEASE); //pretty sure its release
        }
    }
 
    bool isRebasing() const noexcept
   {
-    return _is_rebasing.load(MEMORY_ORDER_ACQUIRE); //pretty sure its acquire
+    return _rebaseOffset.load(MEMORY_ORDER_ACQUIRE) == 0; //pretty sure its acquire
    }
   private:
   SPSC_Lock_Free_Queue_t _queue;
-  std::atomic<bool> _is_rebasing{false};
+  std::atomic<int> _rebaseOffset{0};
   size_t _rebase_size_count_down;
   BaseDetais _baseDetails;
 };
