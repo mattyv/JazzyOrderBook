@@ -80,7 +80,7 @@ class TopOfBook
   Storte _storage;
   int _base;
   int _lower;
-  int -upper;
+  int _upper;
 };
 
 template<size_t initialSize, typename compare, typename Storage = std::map<Tick, OrderEntryLevel, compare>>
@@ -137,21 +137,17 @@ class JazzyOrderBook
      _backThread.run();
    }
     template<typename T>
-   void AddOrder(T && order)
+   void AddOrder(T && orderUpadte)
    {
-   Guard g(_lock);
-   stateStorage.update_order(std::forward<T>(order));
+   Order order = stateStorage.update_order(std::forward<T>(order)); //updates order status based on ID
    Tick tickPrice = convert_to_tock(order.price);
-    if(check side && tickPrice >= end_orderbook_price) //price better than the end of the top of book size
+    if(check side && tickPrice >= end_orderbook_price || (_queue.isRebasing() && tickPrice inside high/low and rebase offset)) //price better than the end of the top of book size
      {
-       if(_queue.isRebasing())
-       //WIP
-       // update volume in top of book;
-       
+       _top.update_order_at_level(update);
      }
      else
      {
-       _q.push_bck(std::forward<T>(order));
+       _q.push_bck(std::forward<T>(levelUpdate));
      }
    }
 
@@ -159,25 +155,21 @@ class JazzyOrderBook
   private:
     void _runBackBook()
     {
-      pin to core on same L2 cache
+      //pin to core on same L2 cache as main thread
       while(true)
       {
-        Order order;
-        while(q.pop_front(order))
+        OrderUpdate update;
+        while(q.pop_front(update))
         {
-           update volume in back of book.
-
-          if(front book has moved too far up or down)
-            break;
+           _back.update_order_at_level(update);
+           if(_q.isRebasing())
+              _top.update_order_at_level(update);
         }
-        Guard g(_lock);
-        generate new front of book.kinda like a rehash to centre the book.
-        update meta data about end of end of top of book tick values.
+         
       }
     }
 
    std::tread _backThread;
-   spin_lock_type _lock;
    SPSC_Lock_Free_Queue _q;
    StaticData _sd;
    TopOfBook _top;
