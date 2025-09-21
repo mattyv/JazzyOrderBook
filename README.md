@@ -58,6 +58,7 @@ struct OrderEntyLevel
   Tick ticks;
   unsinged qty;
   Side side;
+  //std::atomic<unsigned long> rebase_last_seen_sequence; may no need
 };
 
 template<size_t size, typename Storage = beman::inplace_vector<OrderEntyLevel, size>>
@@ -85,8 +86,47 @@ class BackOfBook
 template<EqualityComparable ID, typenme Storage = std::unordered_map<ID,Order>>
 using  OrderStateStorage = Storage;
 
+struct BaseDetails
+{
+  int base;
+  int lower;
+  int upper;
+
+  //rebase details
+  int rebaseOffset;
+};
+
 template<size_t size, typename SPSC_Lock_Free_Queue_t = some_jazz_from_some_lib<size, OrderUpdate>>
-using SPSC_Lock_Free_Queue = SPSC_Lock_Free_Queue_t;
+class SPSC_Lock_Free_Queue 
+{
+  //accessors 'n shiz
+  void startRebasing(int baseOffset)
+  {
+     _baseDetails.rebaseOffset = baseOffset;
+     _rebase_size_count_down = _queue.size();
+     _is_rebasing.store(true, MEMORY_ORDER_RELEASE); //pretty sure its release
+   }
+
+   auto pop_front()
+   {
+      auto rebasing = _is_rebsing.load(MEMORY_ORDER_ACQUIRE); //pretty sure its acquire
+      if(rebasing)
+      {
+          auto elem = _queue.pop_front();
+          --_rebase_size_count;
+       }
+   }
+
+   bool isRebasing() const noexcept
+  {
+    return _is_rebasing.load(MEMORY_ORDER_ACQUIRE); //pretty sure its acquire
+   }
+  private:
+  SPSC_Lock_Free_Queue_t _queue;
+  std::atomic<bool> _is_rebasing{false};
+  size_t _rebase_size_count_down;
+  BaseDetais _baseDetails;
+};
 
 class JazzyOrderBook
 {
