@@ -63,7 +63,6 @@ struct OrderEntyLevel
   Tick ticks;
   unsinged qty;
   Side side;
-  //std::atomic<unsigned long> rebase_last_seen_sequence; may no need
 };
 
 template<int size, typename Storage = beman::inplace_vector<OrderEntyLevel, size>>
@@ -72,8 +71,8 @@ class TopOfBook
  public:
    TopOfBOok(const StaticData& sd, double expectedUpDownVariation) :base(sd.close)
     {
-      //initialise storage range and base based off sttic data range
-      //well rely on the concept of working set size here a bit so TopOfBook range will be a smaller subset of a quite large array so we don't have to reallocate
+      //initialise storage range and base based off static data range
+      //well rely on the concept of working set size here a bit so FrontOfBook range will be a smaller subset of a quite large array so we don't have to reallocate
       auto total_size = size + ((high - low) * (1.0 * expectedUpDownVariation));
       _storage.resize(total_size);
       _lower = base - (size / 2);
@@ -106,6 +105,12 @@ class TopOfBook
 
            
     }
+
+    OrderEntryLevel getOrderAtLevel(Side side, int level)
+   {
+       //check between upper and lower
+       //start from bb or bo and use overlay to find level
+   }
 
       //iterators using overlay. Do iterators for whole TOP of book as well as in bid order and ask order.
       //getters on BBO      
@@ -182,13 +187,17 @@ class JazzyOrderBook
    Tick tickPrice = convert_to_tick(order.price);
     if(check side && tickPrice >= end_orderbook_price || (_queue.isRebasing() && tickPrice inside high/low and rebase offset)) //price better than the end of the top of book size
      {
-       _top.update_order_at_level(update);
+       _front.update_order_at_level(update);
      }
      else
      {
-       _q.push_bck(std::forward<T>(levelUpdate));
+       _q.push_back(std::forward<T>(levelUpdate));
      }
    }
+
+ OrderEntryLevel getLevel(Side side, int level) const
+{
+}
 
     //other accessorys blaah blah ...
   private:
@@ -202,7 +211,7 @@ class JazzyOrderBook
         {
            _back.update_order_at_level(update);
            if(_q.isRebasing())
-              _top.update_order_at_level(update);
+              _front.update_order_at_level(update);
         }
          
       }
@@ -212,7 +221,7 @@ class JazzyOrderBook
   BaseDetais _baseDetails;
    SPSC_Lock_Free_Queue _q;
    StaticData _sd;
-   TopOfBook _top;
+   TopOfBook _front;
    BackOfBoo _back;
    OrderStateStorage _stateStorge;
 };
