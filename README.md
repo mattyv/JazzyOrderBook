@@ -217,7 +217,7 @@ class JazzyOrderBook
    OrderStateStorage _stateStorge;
 };
 ```
- 
+ (below requires updating)
 ```mermaid
 flowchart TD
   A[***Market Update***<br/> - Price<br/> - QTY<br/> - Update Type: New/Update/Delete] --> C{***Price -> Tick Conversion***<br/>Use as index}
