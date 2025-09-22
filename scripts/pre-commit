@@ -1,0 +1,55 @@
+#!/bin/bash
+
+# Pre-commit hook to format C++ files with clang-format
+
+# Check if clang-format is installed
+if ! command -v clang-format &> /dev/null; then
+    echo "clang-format is not installed. Please install it to use this pre-commit hook."
+    echo "On Ubuntu: sudo apt-get install clang-format"
+    echo "On macOS: brew install clang-format"
+    exit 1
+fi
+
+# Get list of staged C++ files
+staged_files=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(cpp|cc|cxx|c\+\+|c|hpp|hh|hxx|h\+\+|h)$')
+
+if [ -z "$staged_files" ]; then
+    # No C++ files staged, exit successfully
+    exit 0
+fi
+
+echo "Running clang-format on staged C++ files..."
+
+# Track if any files were reformatted
+reformatted_files=()
+
+# Format each staged C++ file
+for file in $staged_files; do
+    if [ -f "$file" ]; then
+        # Create a temporary file to check if formatting changes anything
+        temp_file=$(mktemp)
+        clang-format "$file" > "$temp_file"
+
+        if ! cmp -s "$file" "$temp_file"; then
+            echo "Formatting $file"
+            # Format the file in place
+            clang-format -i "$file"
+            # Re-stage the formatted file
+            git add "$file"
+            reformatted_files+=("$file")
+        fi
+
+        rm "$temp_file"
+    fi
+done
+
+if [ ${#reformatted_files[@]} -gt 0 ]; then
+    echo ""
+    echo "The following files were automatically formatted:"
+    printf '%s\n' "${reformatted_files[@]}"
+    echo ""
+    echo "Formatted files have been re-staged. Proceeding with commit."
+fi
+
+echo "clang-format check completed successfully."
+exit 0
