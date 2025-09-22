@@ -1,0 +1,120 @@
+
+---
+Language: Cpp
+AccessModifierOffset: -4
+AlignAfterOpenBracket: AlwaysBreak
+AlignConsecutiveAssignments: false
+AlignConsecutiveDeclarations: false
+AlignConsecutiveBitFields: true
+AlignConsecutiveShortCaseStatements:
+  Enabled: true
+  AcrossEmptyLines: true
+  AcrossComments: true
+  AlignCaseColons: false
+AlignEscapedNewlinesLeft: true
+AlignTrailingComments: false
+AlignOperands: DontAlign
+AllowAllParametersOfDeclarationOnNextLine: true
+AllowAllArgumentsOnNextLine: true
+AllowShortBlocksOnASingleLine: Empty
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortCompoundRequirementOnASingleLine: true
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: All
+AllowShortLambdasOnASingleLine: All
+AlwaysBreakTemplateDeclarations: true
+AlwaysBreakBeforeMultilineStrings: true
+BreakBeforeBinaryOperators: None
+BreakBeforeConceptDeclarations: Always
+BreakInheritanceList: BeforeComma
+BreakBeforeTernaryOperators: true
+BreakConstructorInitializers: BeforeComma
+BreakBeforeInheritanceComma: true
+PackConstructorInitializers: Never
+BinPackArguments: false
+BinPackParameters: false
+BreakBeforeBraces: Custom
+BraceWrapping:
+  BeforeElse: true
+  BeforeCatch: true
+  BeforeLambdaBody: false
+  AfterEnum: true
+  AfterStruct: true
+  AfterClass: true
+  AfterFunction: true
+  AfterControlStatement: true
+  AfterNamespace: false
+  AfterObjCDeclaration: false
+  AfterUnion: true
+  IndentBraces: false
+  SplitEmptyRecord: false
+  SplitEmptyFunction: false
+  SplitEmptyNamespace: false
+BreakAfterJavaFieldAnnotations: false
+AlwaysBreakAfterReturnType: None
+BreakStringLiterals: true
+IncludeBlocks: Preserve
+EmptyLineAfterAccessModifier: Leave
+EmptyLineBeforeAccessModifier: Leave
+ColumnLimit: 120
+CompactNamespaces: true
+FixNamespaceComments: true
+ConstructorInitializerAllOnOneLineOrOnePerLine: true
+ConstructorInitializerIndentWidth: 4
+DerivePointerAlignment: false
+ExperimentalAutoDetectBinPacking: false
+IndentCaseLabels: false
+IndentCaseBlocks: true
+IndentExternBlock: NoIndent
+IndentGotoLabels: false
+IndentRequiresClause: false
+IndentWrappedFunctionNames: false
+IndentFunctionDeclarationAfterType: false
+MaxEmptyLinesToKeep: 1
+KeepEmptyLinesAtTheStartOfBlocks: false
+NamespaceIndentation: None
+BreakAfterAttributes: Leave
+ObjCSpaceAfterProperty: false
+ObjCSpaceBeforeProtocolList: true
+PenaltyBreakBeforeFirstCallParameter: 10
+PenaltyBreakComment: 60
+PenaltyBreakScopeResolution: 1000
+PenaltyBreakString: 1000
+PenaltyBreakFirstLessLess: 120
+PenaltyExcessCharacter: 10000
+PenaltyReturnTypeOnItsOwnLine: 1000
+PointerAlignment: Left
+SpacesBeforeTrailingComments: 1
+Cpp11BracedListStyle: true
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+SpacesInParentheses: false
+SpacesInAngles: false
+SpaceInEmptyParentheses: false
+SpacesInCStyleCastParentheses: false
+SpacesInContainerLiterals: true
+SpaceBeforeAssignmentOperators: true
+ContinuationIndentWidth: 4
+CommentPragmas: "^ IWYU pragma:"
+ForEachMacros: [foreach, Q_FOREACH, BOOST_FOREACH]
+SpaceBeforeParens: ControlStatements
+DisableFormat: false
+WhitespaceSensitiveMacros:
+  [
+    TIBRA_LOG,
+    TIBRA_LOG_SPAM,
+    TIBRA_LOG_DEBUG,
+    TIBRA_LOG_INFO,
+    TIBRA_LOG_WARN,
+    TIBRA_LOG_ERROR,
+    TIBRA_LOG_FATAL,
+    TIBRA_LOG_ALWAYS,
+    TIBRA_ASSERT_MSG,
+    TIBRA_ASSERT_MSG_STREAM,
+    TIBRA_ABORT_MSG,
+    TIBRA_ABORT_MSG_STREAM,
+    LoggedException,
+  ]
+
