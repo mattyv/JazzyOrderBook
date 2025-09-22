@@ -238,4 +238,7 @@ flowchart TD
   H <--> G[Back of book data<br/>Hash Map keyed on order id]
 ```
 
-# Compre/Benchmark against some existing techniques
+# Compare/Benchmark against some existing techniques
+
+## CI/CD Status
+[![CI](https://github.com/mattyv/JazzyOrderBook/workflows/CI/badge.svg)](https://github.com/mattyv/JazzyOrderBook/actions)
