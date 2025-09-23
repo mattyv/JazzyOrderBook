@@ -83,8 +83,9 @@ public:
     using value_type = OrderType;
     using size_type = size_t;
 
-    order_book(tick_type base)
-        : base_{std::move(base)}
+    order_book(tick_type bidBaseValue, tick_type askBaseValue)
+        : bidBaseValue_{std::move(bidBaseValue)}
+        , askBaseValue_{std::move(askBaseValue)}
     {
         bids_.resize(Depth);
         asks_.resize(Depth);
@@ -97,15 +98,9 @@ public:
     {
         auto [it, succ] = orders_.try_emplace(order_id_getter(order), order);
 
-        if (!succ)
-            return;
+        assert(succ && "Duplicate order id on insert_bid");
 
-        auto offset = (tick_value - base_);
-        size_t index = start_ + offset;
-
-        if (0 > index || index >= Depth)
-            throw std::out_of_range("Tick value out of range for bids");
-
+        size_t index = tick_to_index<true>(tick_value);
         bids_[index].volume += order_volume_getter(order);
     }
 
@@ -115,15 +110,9 @@ public:
     {
         auto [it, succ] = orders_.try_emplace(order_id_getter(order), order);
 
-        if (!succ)
-            return;
+        assert(succ && "Duplicate order id on insert_ask");
 
-        auto offset = (tick_value - base_);
-        size_t index = start_ + offset;
-
-        if (0 > index || index >= Depth)
-            throw std::out_of_range("Tick value out of range for asks");
-
+        size_t index = tick_to_index<false>(tick_value);
         asks_[index].volume += order_volume_getter(order);
     }
 
@@ -133,15 +122,9 @@ public:
     {
         auto it = orders_.find(order_id_getter(order));
 
-        if (it == orders_.end())
-            throw std::runtime_error("Bid Order not found");
+        assert(it != orders_.end() && "Bid Order not found");
 
-        auto offset = (tick_value - base_);
-        auto current = bids_[start_ + offset].volume;
-        size_t index = start_ + offset;
-
-        if (0 > index || index >= Depth)
-            throw std::out_of_range("Tick value out of range for bids");
+        size_t index = tick_to_index<true>(tick_value);
 
         auto original_volume = order_volume_getter(it->second);
         auto supplied_volume = order_volume_getter(order);
@@ -159,15 +142,9 @@ public:
     {
         auto it = orders_.find(order_id_getter(order));
 
-        if (it == orders_.end())
-            throw std::runtime_error("Ask Order not found");
+        assert(it != orders_.end() && "Ask Order not found");
 
-        auto offset = (tick_value - base_);
-        auto current = asks_[start_ + offset].volume;
-        size_t index = start_ + offset;
-
-        if (0 > index || index >= Depth)
-            throw std::out_of_range("Tick value out of range for asks");
+        size_t index = tick_to_index<false>(tick_value);
 
         auto original_volume = order_volume_getter(it->second);
         auto supplied_volume = order_volume_getter(order);
@@ -190,14 +167,9 @@ public:
         if (it != orders_.end())
             orders_.erase(it);
         else
-            throw std::runtime_error("Bid Order not found");
+            assert(false && "Bid Order not found");
 
-        auto offset = (tick_value - base_);
-        size_t index = start_ + offset;
-        if (0 > index || index >= Depth)
-            throw std::out_of_range("Tick value out of range for bids");
-
-        auto current = bids_[start_ + offset].volume;
+        size_t index = tick_to_index<true>(tick_value);
         bids_[index].volume -= original_volume;
     }
 
@@ -212,34 +184,93 @@ public:
         if (it != orders_.end())
             orders_.erase(it);
         else
-            throw std::runtime_error("Ask Order not found");
+            assert(false && "Ask Order not found");
 
-        auto offset = (tick_value - base_);
-        size_t index = start_ + offset;
-        if (0 > index || index >= Depth)
-            throw std::out_of_range("Tick value out of range for asks");
-
-        auto current = asks_[start_ + offset].volume;
+        size_t index = tick_to_index<false>(tick_value);
         asks_[index].volume -= original_volume;
     }
 
     volume_type bid_volume_at_tick(tick_type tick_value)
     {
-        auto offset = (tick_value - base_);
-        return bids_[start_ + offset].volume;
+        size_t index = tick_to_index<true>(tick_value);
+        return bids_[index].volume;
     }
 
     volume_type ask_volume_at_tick(tick_type tick_value)
     {
-        auto offset = (tick_value - base_);
-        return asks_[start_ + offset].volume;
+        size_t index = tick_to_index<false>(tick_value);
+        return asks_[index].volume;
+    }
+
+    [[nodiscard]] volume_type bid_volume_at_level(size_type level) const
+    {
+        assert(level < Depth);
+
+        // scanning from high to low
+        // so level 0 is the highest bid
+        // level 1 is the next highest bid, etc
+        for (size_t start_ = Depth - 1; start_ > 0; --start_)
+        {
+            if (bids_[start_].volume != 0)
+            {
+                if (level == 0)
+                    return bids_[start_].volume;
+                --level;
+            }
+        }
+        return 0;
+    }
+
+    [[nodiscard]] volume_type ask_volume_at_level(size_type level) const
+    {
+        assert(level < Depth);
+
+        // scanning from low to high
+        // so level 0 is the lowest ask
+        // level 1 is the next lowest ask, etc
+        for (size_t start_ = 0; start_ < Depth; ++start_)
+        {
+            if (asks_[start_].volume != 0)
+            {
+                if (level == 0)
+                    return asks_[start_].volume;
+                --level;
+            }
+        }
+        return 0;
     }
 
     [[nodiscard]] size_type constexpr size() const noexcept { return Depth; }
-    [[nodiscard]] tick_type base() const noexcept { return base_; }
+    [[nodiscard]] tick_type bidBaseValue() const noexcept { return bidBaseValue_; }
+    [[nodiscard]] tick_type askBaseValue() const noexcept { return askBaseValue_; }
+
+    // Legacy compatibility - returns bid base value
+    [[nodiscard]] tick_type baseValue() const noexcept { return bidBaseValue_; }
+
 private:
-    tick_type base_;
-    size_type start_{Depth / 2};
+    template <bool is_bid>
+    constexpr size_t tick_to_index(tick_type tick_value) const // pass by value is integral
+    {
+        if constexpr (is_bid)
+        {
+            int offset = static_cast<int>(bidBaseValue_) - static_cast<int>(tick_value);
+            assert(offset >= 0 && offset < static_cast<int>(Depth) && "Tick value out of range for bids");
+            size_t index = (Depth - 1) - offset; // Start from high end for bids
+            assert(index < Depth);
+            return index;
+        }
+        else
+        {
+            int offset = static_cast<int>(tick_value) - static_cast<int>(askBaseValue_);
+            assert(offset >= 0 && offset < static_cast<int>(Depth) && "Tick value out of range for asks");
+            size_t index = offset; // Start from low end for asks
+            assert(index < Depth);
+            return index;
+        }
+    }
+    tick_type bidBaseValue_; // represents the highest possible value of the bids
+    tick_type askBaseValue_; // represents the lowest possible value of the asks
+
     bid_storage bids_;
     ask_storage asks_;
     order_storage orders_;
