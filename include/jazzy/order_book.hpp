@@ -1,5 +1,6 @@
 #pragma once
 
+#include <bitset>
 #include <concepts>
 #include <iostream>
 #include <unordered_map>
@@ -53,12 +54,15 @@ concept order = requires(T const& order) {
     };
 };
 
+template <typename T>
+concept tick = std::integral<T> && std::convertible_to<T, size_t>;
+
 constexpr detail::order_id_getter order_id_getter;
 constexpr detail::order_volume_getter order_volume_getter;
 constexpr detail::order_volume_setter order_volume_setter;
 
-template <typename TickType, typename OrderType>
-requires order<OrderType> && std::integral<TickType>
+template <typename TickType, typename OrderType, size_t Depth = 64>
+requires tick<TickType> && order<OrderType>
 class order_book
 {
     using order_type = OrderType;
@@ -75,18 +79,18 @@ class order_book
     using bid_storage = std::vector<level>;
     using ask_storage = std::vector<level>;
     using order_storage = std::unordered_map<id_type, order_type>;
+    using bitset_type = std::bitset<Depth>;
 
 public:
     using value_type = OrderType;
     using size_type = size_t;
 
-    order_book(tick_type base, size_type size)
+    order_book(tick_type base)
         : base_{std::move(base)}
-        , size_{size}
     {
-        bids_.resize(size_);
-        asks_.resize(size_);
-        orders_.reserve(size_);
+        bids_.resize(Depth);
+        asks_.resize(Depth);
+        orders_.reserve(Depth);
     }
 
     template <typename U>
@@ -99,8 +103,12 @@ public:
             return;
 
         auto offset = (tick_value - base_);
+        size_t index = start_ + offset;
 
-        bids_[start_ + offset].volume += order_volume_getter(order);
+        if (0 > index || index >= Depth)
+            throw std::out_of_range("Tick value out of range for bids");
+
+        bids_[index].volume += order_volume_getter(order);
     }
 
     template <typename U>
@@ -113,8 +121,12 @@ public:
             return;
 
         auto offset = (tick_value - base_);
+        size_t index = start_ + offset;
 
-        asks_[start_ + offset].volume += order_volume_getter(order);
+        if (0 > index || index >= Depth)
+            throw std::out_of_range("Tick value out of range for asks");
+
+        asks_[index].volume += order_volume_getter(order);
     }
 
     template <typename U>
@@ -123,16 +135,24 @@ public:
     {
         auto it = orders_.find(order_id_getter(order));
 
+        if (it == orders_.end())
+            throw std::runtime_error("Bid Order not found");
+
+        auto offset = (tick_value - base_);
+        auto current = bids_[start_ + offset].volume;
+        size_t index = start_ + offset;
+
+        if (0 > index || index >= Depth)
+            throw std::out_of_range("Tick value out of range for bids");
+
         auto original_volume = order_volume_getter(it->second);
         auto supplied_volume = order_volume_getter(order);
 
         order_volume_setter(it->second, supplied_volume);
 
-        auto offset = (tick_value - base_);
-        auto current = bids_[start_ + offset].volume;
         auto volume_delta = supplied_volume - original_volume;
 
-        bids_[start_ + offset].volume += volume_delta;
+        bids_[index].volume += volume_delta;
     }
 
     template <typename U>
@@ -141,32 +161,68 @@ public:
     {
         auto it = orders_.find(order_id_getter(order));
 
+        if (it == orders_.end())
+            throw std::runtime_error("Ask Order not found");
+
+        auto offset = (tick_value - base_);
+        auto current = asks_[start_ + offset].volume;
+        size_t index = start_ + offset;
+
+        if (0 > index || index >= Depth)
+            throw std::out_of_range("Tick value out of range for asks");
+
         auto original_volume = order_volume_getter(it->second);
         auto supplied_volume = order_volume_getter(order);
 
         order_volume_setter(it->second, supplied_volume);
 
-        auto offset = (tick_value - base_);
-        auto current = asks_[start_ + offset].volume;
         auto volume_delta = supplied_volume - original_volume;
 
-        asks_[start_ + offset].volume += volume_delta;
+        asks_[index].volume += volume_delta;
     }
 
     template <typename U>
     requires order<U> && std::same_as<order_type, std::decay_t<U>>
     void remove_bid(tick_type tick_value, U&& order)
     {
-        std::cout << "REMOVE BID - OrderId: " << order_id_getter(order) << std::endl;
-        // TODO: Remove bid from price level
+        auto it = orders_.find(order_id_getter(order));
+
+        auto original_volume = order_volume_getter(it->second);
+
+        if (it != orders_.end())
+            orders_.erase(it);
+        else
+            throw std::runtime_error("Bid Order not found");
+
+        auto offset = (tick_value - base_);
+        size_t index = start_ + offset;
+        if (0 > index || index >= Depth)
+            throw std::out_of_range("Tick value out of range for bids");
+
+        auto current = bids_[start_ + offset].volume;
+        bids_[index].volume -= original_volume;
     }
 
     template <typename U>
     requires order<U> && std::same_as<order_type, std::decay_t<U>>
     void remove_ask(tick_type tick_value, U&& order)
     {
-        std::cout << "REMOVE ASK - OrderId: " << order_id_getter(order) << std::endl;
-        // TODO: Remove ask from price level
+        auto it = orders_.find(order_id_getter(order));
+
+        auto original_volume = order_volume_getter(it->second);
+
+        if (it != orders_.end())
+            orders_.erase(it);
+        else
+            throw std::runtime_error("Ask Order not found");
+
+        auto offset = (tick_value - base_);
+        size_t index = start_ + offset;
+        if (0 > index || index >= Depth)
+            throw std::out_of_range("Tick value out of range for asks");
+
+        auto current = asks_[start_ + offset].volume;
+        asks_[index].volume -= original_volume;
     }
 
     volume_type bid_volume_at_tick(tick_type tick_value)
@@ -181,12 +237,11 @@ public:
         return asks_[start_ + offset].volume;
     }
 
-    [[nodiscard]] size_type size() const noexcept { return size_; }
+    [[nodiscard]] size_type constexpr size() const noexcept { return Depth; }
     [[nodiscard]] tick_type base() const noexcept { return base_; }
 private:
     tick_type base_;
-    size_type size_;
-    size_type start_{size_ / 2};
+    size_type start_{Depth / 2};
     bid_storage bids_;
     ask_storage asks_;
     order_storage orders_;
