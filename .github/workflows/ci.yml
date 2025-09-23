@@ -28,6 +28,19 @@ jobs:
           - os: windows-latest
             compiler: msvc
             build_type: Release
+          # Add ARM64 builds
+          - os: ubuntu-24.04-arm64
+            compiler: gcc
+            build_type: Debug
+          - os: ubuntu-24.04-arm64
+            compiler: gcc
+            build_type: Release
+          - os: ubuntu-24.04-arm64
+            compiler: clang
+            build_type: Debug
+          - os: ubuntu-24.04-arm64
+            compiler: clang
+            build_type: Release
 
     steps:
     - uses: actions/checkout@v4
