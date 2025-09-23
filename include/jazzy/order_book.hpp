@@ -31,9 +31,9 @@ public:
     using value_type = OrderType;
     using size_type = size_t;
 
-    order_book(tick_type bidBaseValue, tick_type askBaseValue)
-        : bidBaseValue_{std::move(bidBaseValue)}
-        , askBaseValue_{std::move(askBaseValue)}
+    order_book(tick_type bid_base_value, tick_type ask_base_value)
+        : bid_base_value_{std::move(bid_base_value)}
+        , ask_base_value_{std::move(ask_base_value)}
     {
         bids_.resize(Depth);
         asks_.resize(Depth);
@@ -189,20 +189,17 @@ public:
     }
 
     [[nodiscard]] size_type constexpr size() const noexcept { return Depth; }
-    [[nodiscard]] tick_type bidBaseValue() const noexcept { return bidBaseValue_; }
-    [[nodiscard]] tick_type askBaseValue() const noexcept { return askBaseValue_; }
-    [[nodiscard]] size_type low() const noexcept { return 0; }
-    [[nodiscard]] size_type high() const noexcept { return Depth - 1; }
-
-    // Legacy compatibility - returns bid base value
-    [[nodiscard]] tick_type base() const noexcept { return bidBaseValue_; }
+    [[nodiscard]] tick_type bid_base_value() const noexcept { return bid_base_value_; }
+    [[nodiscard]] tick_type ask_base_value() const noexcept { return ask_base_value_; }
+    [[nodiscard]] size_type constexpr low() const noexcept { return 0; }
+    [[nodiscard]] size_type constexpr high() const noexcept { return Depth - 1; }
 private:
     template <bool is_bid>
     constexpr size_t tick_to_index(tick_type tick_value) const // pass by value is integral
     {
         if constexpr (is_bid)
         {
-            int offset = static_cast<int>(bidBaseValue_) - static_cast<int>(tick_value);
+            int offset = static_cast<int>(bid_base_value_) - static_cast<int>(tick_value);
             assert(offset >= 0 && offset < static_cast<int>(Depth) && "Tick value out of range for bids");
             size_t index = (Depth - 1) - offset; // Start from high end for bids
             assert(index < Depth);
@@ -210,15 +207,15 @@ private:
         }
         else
         {
-            int offset = static_cast<int>(tick_value) - static_cast<int>(askBaseValue_);
+            int offset = static_cast<int>(tick_value) - static_cast<int>(ask_base_value_);
             assert(offset >= 0 && offset < static_cast<int>(Depth) && "Tick value out of range for asks");
             size_t index = offset; // Start from low end for asks
             assert(index < Depth);
             return index;
         }
     }
-    tick_type bidBaseValue_; // represents the highest possible value of the bids
-    tick_type askBaseValue_; // represents the lowest possible value of the asks
+    tick_type bid_base_value_; // represents the highest possible value of the bids
+    tick_type ask_base_value_; // represents the lowest possible value of the asks
 
     bid_storage bids_;
     ask_storage asks_;
