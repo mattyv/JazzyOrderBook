@@ -2,19 +2,6 @@
 #include <jazzy/order_book.hpp>
 #include <order.hpp>
 
-namespace jazzy::tests {
-struct order
-{
-    int order_id{};
-    int volume{};
-};
-
-int jazzy_order_id_getter(order const& o) { return o.order_id; }
-int jazzy_order_volume_getter(order const& o) { return o.volume; }
-void jazzy_order_volume_setter(order& o, int volume) { o.volume = volume; }
-
-} // namespace jazzy::tests
-
 SCENARIO("order books can have bid orders added", "[orderbook]")
 {
     GIVEN("An empty order book")
@@ -91,7 +78,7 @@ SCENARIO("order books can have bid orders added", "[orderbook]")
     {
         static constexpr int base = 100;
         static constexpr int size = 20;
-        jazzy::order_book<int, jazzy::tests::order, size> book{base};
+        jazzy::order_book<int, jazzy::tests::order, size> book{base, 0};
 
         REQUIRE(book.size() == size);
         REQUIRE(book.base() == base);
