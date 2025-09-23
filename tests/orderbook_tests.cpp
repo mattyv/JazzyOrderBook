@@ -13,9 +13,20 @@ int jazzy_order_volume_getter(order const& o) { return o.volume; }
 
 } // namespace jazzy::tests
 
-TEST_CASE("Constructing a orderbook")
+SCENARIO("order books can have orders added", "[orderbook]")
 {
-    jazzy::order_book<int, jazzy::tests::order> ob;
-    jazzy::tests::order o{.order_id = 1, .volume = 2};
-    ob.insert_bid(o);
+    GIVEN("An empty order book")
+    {
+        static constexpr int base = 100;
+        static constexpr int size = 20;
+        jazzy::order_book<int, jazzy::tests::order> book{base, size};
+
+        REQUIRE(book.size() == size);
+        REQUIRE(book.base() == base);
+
+        WHEN("An order is added")
+        {
+            THEN("Then the level should reflect the quantity") {}
+        }
+    }
 }

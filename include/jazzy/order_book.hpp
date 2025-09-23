@@ -2,6 +2,7 @@
 
 #include <concepts>
 #include <iostream>
+#include <unordered_map>
 #include <vector>
 
 namespace jazzy {
@@ -53,6 +54,7 @@ class order_book
     using order_type = OrderType;
     using tick_type = TickType;
     using base_type = TickType;
+    using id_type = order_id_type<order_type>;
     using volume_type = order_volume_type<order_type>;
 
     struct level
@@ -62,31 +64,52 @@ class order_book
 
     using bid_storage = std::vector<level>;
     using ask_storage = std::vector<level>;
+    using order_storage = std::unordered_map<id_type, level>;
 
 public:
     using value_type = OrderType;
+    using size_type = size_t;
 
-    template <typename U>
-    requires order<U> && std::same_as<order_type, std::decay_t<U>>
-    void insert_bid(U&& order)
+    order_book(tick_type base, size_type size)
+        : base_{std::move(base)}
+        , size_{size}
     {
-        std::cout << "INSERT BID - OrderId: " << order_id_getter(order) << std::endl;
-        std::cout << "INSERT BID - Volume: " << order_volume_getter(order) << std::endl;
-        // TODO: Add bid to appropriate price level
+        bids_.resize(size_);
+        asks_.resize(size_);
+        orders_.reserve(size_);
     }
 
     template <typename U>
     requires order<U> && std::same_as<order_type, std::decay_t<U>>
-    void insert_ask(U&& order)
+    void insert_bid(tick_type tick_value, U&& order)
     {
-        std::cout << "INSERT ASK - OrderId: " << order_id_getter(order) << std::endl;
-        std::cout << "INSERT ASK - Volume: " << order_volume_getter(order) << std::endl;
-        // TODO: Add ask to appropriate price level
+        auto [it, succ] = orders_.try_emplace(order_id_getter(order), order);
+
+        if (!succ)
+            return;
+
+        auto offset = (tick_value - base_);
+
+        bids_[start_ + offset].volume += order_volume_getter(order);
     }
 
     template <typename U>
     requires order<U> && std::same_as<order_type, std::decay_t<U>>
-    void update_bid(U&& order)
+    void insert_ask(tick_type tick_value, U&& order)
+    {
+        auto [it, succ] = orders_.try_emplace(order_id_getter(order), order);
+
+        if (!succ)
+            return;
+
+        auto offset = (tick_value - base_);
+
+        asks_[start_ + offset].volume += order_volume_getter(order);
+    }
+
+    template <typename U>
+    requires order<U> && std::same_as<order_type, std::decay_t<U>>
+    void update_bid(tick_type tick_value, U&& order)
     {
         std::cout << "UPDATE BID - OrderId: " << order_id_getter(order) << std::endl;
         std::cout << "UPDATE BID - Volume: " << order_volume_getter(order) << std::endl;
@@ -95,7 +118,7 @@ public:
 
     template <typename U>
     requires order<U> && std::same_as<order_type, std::decay_t<U>>
-    void update_ask(U&& order)
+    void update_ask(tick_type tick_value, U&& order)
     {
         std::cout << "UPDATE ASK - OrderId: " << order_id_getter(order) << std::endl;
         std::cout << "UPDATE ASK - Volume: " << order_volume_getter(order) << std::endl;
@@ -104,7 +127,7 @@ public:
 
     template <typename U>
     requires order<U> && std::same_as<order_type, std::decay_t<U>>
-    void remove_bid(U&& order)
+    void remove_bid(tick_type tick_value, U&& order)
     {
         std::cout << "REMOVE BID - OrderId: " << order_id_getter(order) << std::endl;
         // TODO: Remove bid from price level
@@ -112,15 +135,21 @@ public:
 
     template <typename U>
     requires order<U> && std::same_as<order_type, std::decay_t<U>>
-    void remove_ask(U&& order)
+    void remove_ask(tick_type tick_value, U&& order)
     {
         std::cout << "REMOVE ASK - OrderId: " << order_id_getter(order) << std::endl;
         // TODO: Remove ask from price level
     }
 
+    [[nodiscard]] size_type size() const noexcept { return size_; }
+    [[nodiscard]] tick_type base() const noexcept { return base_; }
 private:
+    tick_type base_;
+    size_type size_;
+    size_type start_{size_ / 2};
     bid_storage bids_;
     ask_storage asks_;
+    order_storage orders_;
 };
 
 } // namespace jazzy
