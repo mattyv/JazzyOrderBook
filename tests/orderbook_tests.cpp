@@ -15,8 +15,8 @@ int jazzy_order_volume_getter(order const& o) { return o.volume; }
 
 TEST_CASE("Constructing a orderbook")
 {
-    jazzy::order_book<int, int, jazzy::tests::order> ob;
+    jazzy::order_book<int, jazzy::tests::order> ob;
 
     jazzy::tests::order o{.order_id = 1, .volume = 2};
-    ob.insert(o);
+    ob.insert_bid(o);
 }
