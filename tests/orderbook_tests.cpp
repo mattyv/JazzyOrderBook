@@ -2,16 +2,17 @@
 #include <jazzy/order_book.hpp>
 #include <order.hpp>
 
+using test_market_stats = jazzy::market_statistics<int, 130, 90, 110, 2000>;
+
 SCENARIO("order books can have bid orders added", "[orderbook]")
 {
     GIVEN("An empty order book")
     {
         static constexpr int base = 110;
-        static constexpr int size = 20;
-        jazzy::order_book<int, jazzy::tests::order, size> book{base, 0};
+        jazzy::order_book<int, jazzy::tests::order, test_market_stats> book{};
 
-        REQUIRE(book.size() == size);
-        REQUIRE(book.bid_base_value() == base);
+        static constexpr auto expected_size = static_cast<size_t>((130 - 90) * (1.0 + 2000 / 10000.0));
+        REQUIRE(book.size() == expected_size);
 
         WHEN("A buy side order is added")
         {
@@ -40,12 +41,12 @@ SCENARIO("order books can have bid orders added", "[orderbook]")
                 REQUIRE(book.bid_volume_at_tick(98) == 5);
                 REQUIRE(book.bid_volume_at_tick(97) == 6);
 
-                REQUIRE(book.bid_volume_at_level(0) == 3); // highest bid (103)
-                REQUIRE(book.bid_volume_at_level(1) == 2); // next highest bid (102)
-                REQUIRE(book.bid_volume_at_level(2) == 1); // next highest bid (101)
-                REQUIRE(book.bid_volume_at_level(3) == 4); // next highest bid (99)
-                REQUIRE(book.bid_volume_at_level(4) == 5); // next highest bid (98)
-                REQUIRE(book.bid_volume_at_level(5) == 6); // lowest bid (97)
+                REQUIRE(book.bid_at_level(0).volume == 3); // highest bid (103)
+                REQUIRE(book.bid_at_level(1).volume == 2); // next highest bid (102)
+                REQUIRE(book.bid_at_level(2).volume == 1); // next highest bid (101)
+                REQUIRE(book.bid_at_level(3).volume == 4); // next highest bid (99)
+                REQUIRE(book.bid_at_level(4).volume == 5); // next highest bid (98)
+                REQUIRE(book.bid_at_level(5).volume == 6); // lowest bid (97)
             }
         }
     }
@@ -53,11 +54,10 @@ SCENARIO("order books can have bid orders added", "[orderbook]")
     GIVEN("An order book with a number of bid orders")
     {
         static constexpr int base = 110;
-        static constexpr int size = 20;
-        jazzy::order_book<int, jazzy::tests::order, size> book{base, 0};
+        jazzy::order_book<int, jazzy::tests::order, test_market_stats> book{};
 
-        REQUIRE(book.size() == size);
-        REQUIRE(book.bid_base_value() == base);
+        static constexpr auto expected_size = static_cast<size_t>((130 - 90) * (1.0 + 2000 / 10000.0));
+        REQUIRE(book.size() == expected_size);
 
         book.insert_bid(101, jazzy::tests::order{.order_id = 1, .volume = 1});
         book.insert_bid(102, jazzy::tests::order{.order_id = 2, .volume = 2});
@@ -74,7 +74,7 @@ SCENARIO("order books can have bid orders added", "[orderbook]")
             THEN("Then the level should reflect the adjustment")
             {
                 REQUIRE(book.bid_volume_at_tick(97) == 14);
-                REQUIRE(book.bid_volume_at_level(5) == 14); // lowest bid level
+                REQUIRE(book.bid_at_level(5).volume == 14); // lowest bid level
             }
         }
 
@@ -84,19 +84,18 @@ SCENARIO("order books can have bid orders added", "[orderbook]")
             THEN("Then the level should reflect the adjustment")
             {
                 REQUIRE(book.bid_volume_at_tick(97) == 8);
-                REQUIRE(book.bid_volume_at_level(5) == 8); // lowest bid level
+                REQUIRE(book.bid_at_level(5).volume == 8); // lowest bid level
             }
         }
     }
 
     GIVEN("An order book with a number of ask orders")
     {
-        static constexpr int base = 95;
-        static constexpr int size = 20;
-        jazzy::order_book<int, jazzy::tests::order, size> book{0, base};
+        static constexpr int base = 90;
+        jazzy::order_book<int, jazzy::tests::order, test_market_stats> book{};
 
-        REQUIRE(book.size() == size);
-        REQUIRE(book.ask_base_value() == base);
+        static constexpr auto expected_size = static_cast<size_t>((130 - 90) * (1.0 + 2000 / 10000.0));
+        REQUIRE(book.size() == expected_size);
 
         book.insert_ask(101, jazzy::tests::order{.order_id = 1, .volume = 1});
         book.insert_ask(102, jazzy::tests::order{.order_id = 2, .volume = 2});
@@ -126,11 +125,10 @@ SCENARIO("order books can have ask orders added", "[orderbook]")
     GIVEN("An empty order book")
     {
         static constexpr int base = 110;
-        static constexpr int size = 20;
-        jazzy::order_book<int, jazzy::tests::order, size> book{0, base};
+        jazzy::order_book<int, jazzy::tests::order, test_market_stats> book{};
 
-        REQUIRE(book.size() == size);
-        REQUIRE(book.ask_base_value() == base);
+        static constexpr auto expected_size = static_cast<size_t>((130 - 90) * (1.0 + 2000 / 10000.0));
+        REQUIRE(book.size() == expected_size);
 
         WHEN("A sell side order is added")
         {
@@ -159,23 +157,22 @@ SCENARIO("order books can have ask orders added", "[orderbook]")
                 REQUIRE(book.ask_volume_at_tick(121) == 5);
                 REQUIRE(book.ask_volume_at_tick(122) == 6);
 
-                REQUIRE(book.ask_volume_at_level(0) == 1); // lowest ask (115)
-                REQUIRE(book.ask_volume_at_level(1) == 2); // next lowest ask (116)
-                REQUIRE(book.ask_volume_at_level(2) == 3); // next lowest ask (117)
-                REQUIRE(book.ask_volume_at_level(3) == 4); // next lowest ask (120)
-                REQUIRE(book.ask_volume_at_level(4) == 5); // next lowest ask (121)
-                REQUIRE(book.ask_volume_at_level(5) == 6); // highest ask (122)
+                REQUIRE(book.ask_at_level(0).volume == 1); // lowest ask (115)
+                REQUIRE(book.ask_at_level(1).volume == 2); // next lowest ask (116)
+                REQUIRE(book.ask_at_level(2).volume == 3); // next lowest ask (117)
+                REQUIRE(book.ask_at_level(3).volume == 4); // next lowest ask (120)
+                REQUIRE(book.ask_at_level(4).volume == 5); // next lowest ask (121)
+                REQUIRE(book.ask_at_level(5).volume == 6); // highest ask (122)
             }
         }
     }
     GIVEN("A non empty order book")
     {
         static constexpr int base = 110;
-        static constexpr int size = 20;
-        jazzy::order_book<int, jazzy::tests::order, size> book{0, base};
+        jazzy::order_book<int, jazzy::tests::order, test_market_stats> book{};
 
-        REQUIRE(book.size() == size);
-        REQUIRE(book.ask_base_value() == base);
+        static constexpr auto expected_size = static_cast<size_t>((130 - 90) * (1.0 + 2000 / 10000.0));
+        REQUIRE(book.size() == expected_size);
 
         book.insert_ask(115, jazzy::tests::order{.order_id = 1, .volume = 1});
         book.insert_ask(116, jazzy::tests::order{.order_id = 2, .volume = 2});
@@ -192,7 +189,7 @@ SCENARIO("order books can have ask orders added", "[orderbook]")
             THEN("Then the level should reflect the adjustment")
             {
                 REQUIRE(book.ask_volume_at_tick(122) == 14);
-                REQUIRE(book.ask_volume_at_level(5) == 14); // highest ask level
+                REQUIRE(book.ask_at_level(5).volume == 14); // highest ask level
             }
         }
     }
@@ -204,8 +201,7 @@ SCENARIO("order books can have bid orders modified", "[orderbook]")
     {
         static constexpr int bid_base = 110;
         static constexpr int ask_base = 120;
-        static constexpr int size = 20;
-        jazzy::order_book<int, jazzy::tests::order, size> book{bid_base, ask_base};
+        jazzy::order_book<int, jazzy::tests::order, test_market_stats> book{};
 
         book.insert_bid(105, jazzy::tests::order{.order_id = 1, .volume = 10});
         book.insert_bid(104, jazzy::tests::order{.order_id = 2, .volume = 15});
@@ -225,9 +221,9 @@ SCENARIO("order books can have bid orders modified", "[orderbook]")
                 REQUIRE(book.bid_volume_at_tick(104) == 15);
                 REQUIRE(book.bid_volume_at_tick(103) == 20);
 
-                REQUIRE(book.bid_volume_at_level(0) == 25); // highest bid (105)
-                REQUIRE(book.bid_volume_at_level(1) == 15); // next highest bid (104)
-                REQUIRE(book.bid_volume_at_level(2) == 20); // lowest bid (103)
+                REQUIRE(book.bid_at_level(0).volume == 25); // highest bid (105)
+                REQUIRE(book.bid_at_level(1).volume == 15); // next highest bid (104)
+                REQUIRE(book.bid_at_level(2).volume == 20); // lowest bid (103)
             }
         }
 
@@ -241,9 +237,9 @@ SCENARIO("order books can have bid orders modified", "[orderbook]")
                 REQUIRE(book.bid_volume_at_tick(104) == 5);
                 REQUIRE(book.bid_volume_at_tick(103) == 20);
 
-                REQUIRE(book.bid_volume_at_level(0) == 10); // highest bid (105)
-                REQUIRE(book.bid_volume_at_level(1) == 5); // next highest bid (104)
-                REQUIRE(book.bid_volume_at_level(2) == 20); // lowest bid (103)
+                REQUIRE(book.bid_at_level(0).volume == 10); // highest bid (105)
+                REQUIRE(book.bid_at_level(1).volume == 5); // next highest bid (104)
+                REQUIRE(book.bid_at_level(2).volume == 20); // lowest bid (103)
             }
         }
 
@@ -267,8 +263,7 @@ SCENARIO("order books can have bid orders removed", "[orderbook]")
     {
         static constexpr int bid_base = 110;
         static constexpr int ask_base = 120;
-        static constexpr int size = 20;
-        jazzy::order_book<int, jazzy::tests::order, size> book{bid_base, ask_base};
+        jazzy::order_book<int, jazzy::tests::order, test_market_stats> book{};
 
         book.insert_bid(105, jazzy::tests::order{.order_id = 1, .volume = 10});
         book.insert_bid(104, jazzy::tests::order{.order_id = 2, .volume = 15});
@@ -289,8 +284,8 @@ SCENARIO("order books can have bid orders removed", "[orderbook]")
                 REQUIRE(book.bid_volume_at_tick(104) == 15);
                 REQUIRE(book.bid_volume_at_tick(103) == 25);
 
-                REQUIRE(book.bid_volume_at_level(0) == 15); // highest remaining bid (104)
-                REQUIRE(book.bid_volume_at_level(1) == 25); // lowest bid (103)
+                REQUIRE(book.bid_at_level(0).volume == 15); // highest remaining bid (104)
+                REQUIRE(book.bid_at_level(1).volume == 25); // lowest bid (103)
             }
         }
 
@@ -326,8 +321,7 @@ SCENARIO("order books can have ask orders modified", "[orderbook]")
     {
         static constexpr int bid_base = 110;
         static constexpr int ask_base = 120;
-        static constexpr int size = 20;
-        jazzy::order_book<int, jazzy::tests::order, size> book{bid_base, ask_base};
+        jazzy::order_book<int, jazzy::tests::order, test_market_stats> book{};
 
         book.insert_ask(121, jazzy::tests::order{.order_id = 1, .volume = 10});
         book.insert_ask(122, jazzy::tests::order{.order_id = 2, .volume = 15});
@@ -347,9 +341,9 @@ SCENARIO("order books can have ask orders modified", "[orderbook]")
                 REQUIRE(book.ask_volume_at_tick(122) == 15);
                 REQUIRE(book.ask_volume_at_tick(123) == 20);
 
-                REQUIRE(book.ask_volume_at_level(0) == 25); // lowest ask (121)
-                REQUIRE(book.ask_volume_at_level(1) == 15); // next lowest ask (122)
-                REQUIRE(book.ask_volume_at_level(2) == 20); // highest ask (123)
+                REQUIRE(book.ask_at_level(0).volume == 25); // lowest ask (121)
+                REQUIRE(book.ask_at_level(1).volume == 15); // next lowest ask (122)
+                REQUIRE(book.ask_at_level(2).volume == 20); // highest ask (123)
             }
         }
 
@@ -363,9 +357,9 @@ SCENARIO("order books can have ask orders modified", "[orderbook]")
                 REQUIRE(book.ask_volume_at_tick(122) == 5);
                 REQUIRE(book.ask_volume_at_tick(123) == 20);
 
-                REQUIRE(book.ask_volume_at_level(0) == 10); // lowest ask (121)
-                REQUIRE(book.ask_volume_at_level(1) == 5); // next lowest ask (122)
-                REQUIRE(book.ask_volume_at_level(2) == 20); // highest ask (123)
+                REQUIRE(book.ask_at_level(0).volume == 10); // lowest ask (121)
+                REQUIRE(book.ask_at_level(1).volume == 5); // next lowest ask (122)
+                REQUIRE(book.ask_at_level(2).volume == 20); // highest ask (123)
             }
         }
 
@@ -389,8 +383,7 @@ SCENARIO("order books can have ask orders removed", "[orderbook]")
     {
         static constexpr int bid_base = 110;
         static constexpr int ask_base = 120;
-        static constexpr int size = 20;
-        jazzy::order_book<int, jazzy::tests::order, size> book{bid_base, ask_base};
+        jazzy::order_book<int, jazzy::tests::order, test_market_stats> book{};
 
         book.insert_ask(121, jazzy::tests::order{.order_id = 1, .volume = 10});
         book.insert_ask(122, jazzy::tests::order{.order_id = 2, .volume = 15});
@@ -411,8 +404,8 @@ SCENARIO("order books can have ask orders removed", "[orderbook]")
                 REQUIRE(book.ask_volume_at_tick(122) == 15);
                 REQUIRE(book.ask_volume_at_tick(123) == 25);
 
-                REQUIRE(book.ask_volume_at_level(0) == 15); // lowest remaining ask (122)
-                REQUIRE(book.ask_volume_at_level(1) == 25); // highest ask (123)
+                REQUIRE(book.ask_at_level(0).volume == 15); // lowest remaining ask (122)
+                REQUIRE(book.ask_at_level(1).volume == 25); // highest ask (123)
             }
         }
 
@@ -437,6 +430,198 @@ SCENARIO("order books can have ask orders removed", "[orderbook]")
                 REQUIRE(book.ask_volume_at_tick(121) == 10);
                 REQUIRE(book.ask_volume_at_tick(122) == 0);
                 REQUIRE(book.ask_volume_at_tick(123) == 25);
+            }
+        }
+    }
+}
+
+SCENARIO("order book edge cases and comprehensive testing", "[orderbook][edge_cases]")
+{
+    using edge_market_stats = jazzy::market_statistics<int, 150, 50, 100, 1000>;
+
+    GIVEN("An empty order book")
+    {
+        jazzy::order_book<int, jazzy::tests::order, edge_market_stats> book{};
+
+        WHEN("Querying levels on empty book")
+        {
+            THEN("bid_at_level should return zero volume")
+            {
+                REQUIRE(book.bid_at_level(0).volume == 0);
+                REQUIRE(book.bid_at_level(5).volume == 0);
+            }
+
+            THEN("ask_at_level should return zero volume")
+            {
+                REQUIRE(book.ask_at_level(0).volume == 0);
+                REQUIRE(book.ask_at_level(5).volume == 0);
+            }
+        }
+    }
+
+    GIVEN("A book with bids at boundary tick values")
+    {
+        jazzy::order_book<int, jazzy::tests::order, edge_market_stats> book{};
+
+        WHEN("Adding bids at daily_high and near daily_low")
+        {
+            book.insert_bid(150, jazzy::tests::order{.order_id = 1, .volume = 100}); // daily_high
+            book.insert_bid(51, jazzy::tests::order{.order_id = 2, .volume = 200}); // near daily_low
+            book.insert_bid(52, jazzy::tests::order{.order_id = 3, .volume = 300});
+
+            THEN("Level queries should work correctly")
+            {
+                REQUIRE(book.bid_at_level(0).volume == 100); // highest bid (150)
+                REQUIRE(book.bid_at_level(1).volume == 300); // next highest (52)
+                REQUIRE(book.bid_at_level(2).volume == 200); // lowest bid (51)
+
+                REQUIRE(book.bid_volume_at_tick(150) == 100);
+                REQUIRE(book.bid_volume_at_tick(52) == 300);
+                REQUIRE(book.bid_volume_at_tick(51) == 200);
+            }
+        }
+    }
+
+    GIVEN("A book with asks at boundary tick values")
+    {
+        jazzy::order_book<int, jazzy::tests::order, edge_market_stats> book{};
+
+        WHEN("Adding asks at daily_low and near daily_high")
+        {
+            book.insert_ask(50, jazzy::tests::order{.order_id = 1, .volume = 100}); // daily_low
+            book.insert_ask(149, jazzy::tests::order{.order_id = 2, .volume = 200}); // near daily_high
+            book.insert_ask(148, jazzy::tests::order{.order_id = 3, .volume = 300});
+
+            THEN("Level queries should work correctly")
+            {
+                REQUIRE(book.ask_at_level(0).volume == 100); // lowest ask (50)
+                REQUIRE(book.ask_at_level(1).volume == 300); // next lowest (148)
+                REQUIRE(book.ask_at_level(2).volume == 200); // highest ask (149)
+
+                REQUIRE(book.ask_volume_at_tick(50) == 100);
+                REQUIRE(book.ask_volume_at_tick(148) == 300);
+                REQUIRE(book.ask_volume_at_tick(149) == 200);
+            }
+        }
+    }
+}
+
+SCENARIO("order book best bid/ask optimization", "[orderbook][performance]")
+{
+    GIVEN("A book with multiple bid levels")
+    {
+        jazzy::order_book<int, jazzy::tests::order, test_market_stats> book{};
+
+        book.insert_bid(100, jazzy::tests::order{.order_id = 1, .volume = 10});
+        book.insert_bid(99, jazzy::tests::order{.order_id = 2, .volume = 20});
+        book.insert_bid(98, jazzy::tests::order{.order_id = 3, .volume = 30});
+
+        WHEN("Updating volume without changing tick (should not trigger rescan)")
+        {
+            book.update_bid(99, jazzy::tests::order{.order_id = 2, .volume = 25});
+
+            THEN("Levels should reflect the change")
+            {
+                REQUIRE(book.bid_at_level(0).volume == 10); // best bid unchanged
+                REQUIRE(book.bid_at_level(1).volume == 25); // updated volume
+                REQUIRE(book.bid_at_level(2).volume == 30);
+                REQUIRE(book.bid_volume_at_tick(99) == 25);
+            }
+        }
+
+        WHEN("Completely removing the best bid level")
+        {
+            book.update_bid(100, jazzy::tests::order{.order_id = 1, .volume = 0});
+
+            THEN("Best bid should update to next level")
+            {
+                REQUIRE(book.bid_at_level(0).volume == 20); // 99 is now best
+                REQUIRE(book.bid_at_level(1).volume == 30); // 98 is next
+                REQUIRE(book.bid_volume_at_tick(100) == 0);
+                REQUIRE(book.bid_volume_at_tick(99) == 20);
+            }
+        }
+
+        WHEN("Moving an order to a better price")
+        {
+            book.update_bid(101, jazzy::tests::order{.order_id = 2, .volume = 20}); // move from 99 to 101
+
+            THEN("Best bid should update immediately")
+            {
+                REQUIRE(book.bid_at_level(0).volume == 20); // 101 is now best
+                REQUIRE(book.bid_at_level(1).volume == 10); // 100 is next
+                REQUIRE(book.bid_at_level(2).volume == 30); // 98 remains
+                REQUIRE(book.bid_volume_at_tick(101) == 20);
+                REQUIRE(book.bid_volume_at_tick(99) == 0);
+            }
+        }
+    }
+
+    GIVEN("A book with multiple ask levels")
+    {
+        jazzy::order_book<int, jazzy::tests::order, test_market_stats> book{};
+
+        book.insert_ask(100, jazzy::tests::order{.order_id = 1, .volume = 10});
+        book.insert_ask(101, jazzy::tests::order{.order_id = 2, .volume = 20});
+        book.insert_ask(102, jazzy::tests::order{.order_id = 3, .volume = 30});
+
+        WHEN("Completely removing the best ask level")
+        {
+            book.update_ask(100, jazzy::tests::order{.order_id = 1, .volume = 0});
+
+            THEN("Best ask should update to next level")
+            {
+                REQUIRE(book.ask_at_level(0).volume == 20); // 101 is now best
+                REQUIRE(book.ask_at_level(1).volume == 30); // 102 is next
+                REQUIRE(book.ask_volume_at_tick(100) == 0);
+                REQUIRE(book.ask_volume_at_tick(101) == 20);
+            }
+        }
+
+        WHEN("Moving an order to a better price")
+        {
+            book.update_ask(99, jazzy::tests::order{.order_id = 2, .volume = 20}); // move from 101 to 99
+
+            THEN("Best ask should update immediately")
+            {
+                REQUIRE(book.ask_at_level(0).volume == 20); // 99 is now best
+                REQUIRE(book.ask_at_level(1).volume == 10); // 100 is next
+                REQUIRE(book.ask_at_level(2).volume == 30); // 102 remains
+                REQUIRE(book.ask_volume_at_tick(99) == 20);
+                REQUIRE(book.ask_volume_at_tick(101) == 0);
+            }
+        }
+    }
+}
+
+SCENARIO("order book market stats sizing", "[orderbook][sizing]")
+{
+    GIVEN("Different market statistics configurations")
+    {
+        using small_market = jazzy::market_statistics<int, 110, 90, 100, 500>;
+        using large_market = jazzy::market_statistics<int, 200, 50, 125, 3000>;
+
+        jazzy::order_book<int, jazzy::tests::order, small_market> small_book{};
+        jazzy::order_book<int, jazzy::tests::order, large_market> large_book{};
+
+        THEN("Books should have different sizes based on market range")
+        {
+            // small: (110-90) * (1 + 0.05) = 20 * 1.05 = 21
+            REQUIRE(small_book.size() == 21);
+
+            // large: (200-50) * (1 + 0.30) = 150 * 1.30 = 195
+            REQUIRE(large_book.size() == 195);
+        }
+
+        WHEN("Adding orders to both books")
+        {
+            small_book.insert_bid(100, jazzy::tests::order{.order_id = 1, .volume = 10});
+            large_book.insert_bid(150, jazzy::tests::order{.order_id = 1, .volume = 20});
+
+            THEN("Both should handle orders correctly within their ranges")
+            {
+                REQUIRE(small_book.bid_volume_at_tick(100) == 10);
+                REQUIRE(large_book.bid_volume_at_tick(150) == 20);
             }
         }
     }
