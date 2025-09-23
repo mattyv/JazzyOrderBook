@@ -56,6 +56,9 @@ public:
     requires order<U> && std::same_as<order_type, std::decay_t<U>>
     void insert_bid(tick_type tick_value, U&& order)
     {
+        if (tick_value > MarketStats::daily_high_v || tick_value < MarketStats::daily_low_v)
+            return; // Ignore out of range bids
+
         auto [it, succ] = orders_.try_emplace(order_id_getter(order), order);
 
         assert(succ);
@@ -74,6 +77,9 @@ public:
     requires order<U> && std::same_as<order_type, std::decay_t<U>>
     void insert_ask(tick_type tick_value, U&& order)
     {
+        if (tick_value > MarketStats::daily_high_v || tick_value < MarketStats::daily_low_v)
+            return; // Ignore out of range asks
+
         auto [it, succ] = orders_.try_emplace(order_id_getter(order), order);
 
         assert(succ);
@@ -92,6 +98,10 @@ public:
     requires order<U> && std::same_as<order_type, std::decay_t<U>>
     void update_bid(tick_type tick_value, U&& order)
     {
+        // ignore out of range bids
+        if (tick_value > MarketStats::daily_high_v || tick_value < MarketStats::daily_low_v)
+            return;
+
         auto it = orders_.find(order_id_getter(order));
         assert(it != orders_.end());
 
@@ -142,6 +152,9 @@ public:
     requires order<U> && std::same_as<order_type, std::decay_t<U>>
     void update_ask(tick_type tick_value, U&& order)
     {
+        if (tick_value > MarketStats::daily_high_v || tick_value < MarketStats::daily_low_v)
+            return; // Ignore out of range asks
+
         auto it = orders_.find(order_id_getter(order));
         assert(it != orders_.end());
 
@@ -192,6 +205,10 @@ public:
     requires order<U> && std::same_as<order_type, std::decay_t<U>>
     void remove_bid(tick_type tick_value, U&& order)
     {
+        // Ignore out of range bids
+        if (tick_value > MarketStats::daily_high_v || tick_value < MarketStats::daily_low_v)
+            return;
+
         auto it = orders_.find(order_id_getter(order));
 
         auto original_volume = order_volume_getter(it->second);
@@ -207,6 +224,10 @@ public:
     requires order<U> && std::same_as<order_type, std::decay_t<U>>
     void remove_ask(tick_type tick_value, U&& order)
     {
+        // Ignore out of range asks
+        if (tick_value > MarketStats::daily_high_v || tick_value < MarketStats::daily_low_v)
+            return;
+
         auto it = orders_.find(order_id_getter(order));
 
         auto original_volume = order_volume_getter(it->second);
@@ -220,12 +241,18 @@ public:
 
     volume_type bid_volume_at_tick(tick_type tick_value)
     {
+        if (tick_value > MarketStats::daily_high_v || tick_value < MarketStats::daily_low_v)
+            return 0; // Out of range bids have zero volume
+
         size_type index = tick_to_index<true>(tick_value);
         return bids_[index].volume;
     }
 
     volume_type ask_volume_at_tick(tick_type tick_value)
     {
+        if (tick_value > MarketStats::daily_high_v || tick_value < MarketStats::daily_low_v)
+            return 0; // Out of range asks have zero volume
+
         size_type index = tick_to_index<false>(tick_value);
         return asks_[index].volume;
     }
