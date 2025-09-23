@@ -26,6 +26,15 @@ struct order_volume_getter
     }
 };
 
+struct order_volume_setter
+{
+    template <typename T, typename U>
+    constexpr void operator()(T& obj, U const& value) const
+    {
+        jazzy_order_volume_setter(obj, value);
+    }
+};
+
 } // namespace detail
 
 template <typename T>
@@ -46,6 +55,7 @@ concept order = requires(T const& order) {
 
 constexpr detail::order_id_getter order_id_getter;
 constexpr detail::order_volume_getter order_volume_getter;
+constexpr detail::order_volume_setter order_volume_setter;
 
 template <typename TickType, typename OrderType>
 requires order<OrderType> && std::integral<TickType>
@@ -111,18 +121,36 @@ public:
     requires order<U> && std::same_as<order_type, std::decay_t<U>>
     void update_bid(tick_type tick_value, U&& order)
     {
-        std::cout << "UPDATE BID - OrderId: " << order_id_getter(order) << std::endl;
-        std::cout << "UPDATE BID - Volume: " << order_volume_getter(order) << std::endl;
-        // TODO: Modify existing bid
+        auto it = orders_.find(order_id_getter(order));
+
+        auto original_volume = order_volume_getter(it->second);
+        auto supplied_volume = order_volume_getter(order);
+
+        order_volume_setter(it->second, supplied_volume);
+
+        auto offset = (tick_value - base_);
+        auto current = bids_[start_ + offset].volume;
+        auto volume_delta = supplied_volume - original_volume;
+
+        bids_[start_ + offset].volume += volume_delta;
     }
 
     template <typename U>
     requires order<U> && std::same_as<order_type, std::decay_t<U>>
     void update_ask(tick_type tick_value, U&& order)
     {
-        std::cout << "UPDATE ASK - OrderId: " << order_id_getter(order) << std::endl;
-        std::cout << "UPDATE ASK - Volume: " << order_volume_getter(order) << std::endl;
-        // TODO: Modify existing ask
+        auto it = orders_.find(order_id_getter(order));
+
+        auto original_volume = order_volume_getter(it->second);
+        auto supplied_volume = order_volume_getter(order);
+
+        order_volume_setter(it->second, supplied_volume);
+
+        auto offset = (tick_value - base_);
+        auto current = asks_[start_ + offset].volume;
+        auto volume_delta = supplied_volume - original_volume;
+
+        asks_[start_ + offset].volume += volume_delta;
     }
 
     template <typename U>
