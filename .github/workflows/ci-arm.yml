@@ -1,39 +1,39 @@
-name: CI
+name: ARM64 CI
 
 on:
+  workflow_dispatch:
   push:
     branches: [ main, develop ]
+    paths:
+      - '**.cpp'
+      - '**.hpp'
+      - '**.h'
+      - 'CMakeLists.txt'
+      - '**/CMakeLists.txt'
   pull_request:
     branches: [ main, develop ]
+    paths:
+      - '**.cpp'
+      - '**.hpp'
+      - '**.h'
+      - 'CMakeLists.txt'
+      - '**/CMakeLists.txt'
 
 jobs:
-  build-and-test:
+  build-and-test-arm:
     name: ${{ matrix.os }}-${{ matrix.compiler }}-${{ matrix.build_type }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-24.04-arm64]
         compiler: [gcc, clang]
         build_type: [Debug, Release]
-        exclude:
-          # Windows doesn't have gcc easily available
-          - os: windows-latest
-            compiler: gcc
-        include:
-          # Add MSVC for Windows
-          - os: windows-latest
-            compiler: msvc
-            build_type: Debug
-          - os: windows-latest
-            compiler: msvc
-            build_type: Release
 
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set up compiler (Linux)
-      if: runner.os == 'Linux'
+    - name: Set up compiler
       run: |
         if [ "${{ matrix.compiler }}" == "gcc" ]; then
           # Add GCC 14 PPA and install
@@ -52,38 +52,15 @@ jobs:
           echo "CXX=clang++-18" >> $GITHUB_ENV
         fi
 
-    - name: Set up MSVC (Windows)
-      if: runner.os == 'Windows' && matrix.compiler == 'msvc'
-      uses: microsoft/setup-msbuild@v1.3
-
-    - name: Set up clang (Windows)
-      if: runner.os == 'Windows' && matrix.compiler == 'clang'
-      run: |
-        echo "CC=clang" >> $env:GITHUB_ENV
-        echo "CXX=clang++" >> $env:GITHUB_ENV
-
     - name: Create build directory
       run: mkdir build
 
-    - name: Configure CMake (Unix)
-      if: runner.os != 'Windows'
+    - name: Configure CMake
       working-directory: build
       run: |
         cmake .. \
           -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
           -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-
-    - name: Configure CMake (Windows MSVC)
-      if: runner.os == 'Windows' && matrix.compiler == 'msvc'
-      working-directory: build
-      run: |
-        cmake .. -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-
-    - name: Configure CMake (Windows Clang)
-      if: runner.os == 'Windows' && matrix.compiler == 'clang'
-      working-directory: build
-      run: |
-        cmake .. -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
     - name: Build
       working-directory: build
