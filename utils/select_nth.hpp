@@ -140,7 +140,11 @@ inline bool cpu_has_bmi2()
 // position of 'mask'.
 // - countr_zero then returns its index.
 // Precondition: 0 <= n < popcount(mask), otherwise throws.
-inline int select_nth_set_bit_bmi2(uint64_t mask, unsigned n)
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((target("bmi2")))
+#endif
+inline int
+select_nth_set_bit_bmi2(uint64_t mask, unsigned n)
 {
     const unsigned total = std::popcount(mask);
     if (n >= total)
