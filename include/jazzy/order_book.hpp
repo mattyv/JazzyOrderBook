@@ -1,8 +1,8 @@
 #pragma once
 
-#include "types.hpp"
 #include <cassert>
 #include <jazzy/traits.hpp>
+#include <jazzy/types.hpp>
 
 #include <unordered_map>
 #include <vector>
