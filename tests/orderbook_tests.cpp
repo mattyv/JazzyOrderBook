@@ -24,11 +24,33 @@ SCENARIO("order books can have orders added", "[orderbook]")
         REQUIRE(book.size() == size);
         REQUIRE(book.base() == base);
 
-        WHEN("An buy side order is added")
+        WHEN("A buy side order is added")
         {
             book.insert_bid(101, jazzy::tests::order{.order_id = 1, .volume = 10});
 
             THEN("Then the level should reflect the quantity") { REQUIRE(book.bid_volume_at_tick(101) == 10); }
+        }
+
+        WHEN("multiple buy side orders are added")
+        {
+            book.insert_bid(101, jazzy::tests::order{.order_id = 1, .volume = 1});
+            book.insert_bid(102, jazzy::tests::order{.order_id = 2, .volume = 2});
+            book.insert_bid(103, jazzy::tests::order{.order_id = 3, .volume = 3});
+
+            book.insert_bid(99, jazzy::tests::order{.order_id = 4, .volume = 4});
+            book.insert_bid(98, jazzy::tests::order{.order_id = 5, .volume = 5});
+            book.insert_bid(97, jazzy::tests::order{.order_id = 6, .volume = 6});
+
+            THEN("Then the level should reflect the quantity")
+            {
+                REQUIRE(book.bid_volume_at_tick(101) == 1);
+                REQUIRE(book.bid_volume_at_tick(102) == 2);
+                REQUIRE(book.bid_volume_at_tick(103) == 3);
+
+                REQUIRE(book.bid_volume_at_tick(99) == 4);
+                REQUIRE(book.bid_volume_at_tick(98) == 5);
+                REQUIRE(book.bid_volume_at_tick(97) == 6);
+            }
         }
     }
 }
