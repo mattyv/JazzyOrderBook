@@ -20,7 +20,7 @@ SCENARIO("order books can have orders added", "[orderbook]")
     {
         static constexpr int base = 100;
         static constexpr int size = 20;
-        jazzy::order_book<int, jazzy::tests::order> book{base, size};
+        jazzy::order_book<int, jazzy::tests::order, size> book{base};
 
         REQUIRE(book.size() == size);
         REQUIRE(book.base() == base);
@@ -58,7 +58,7 @@ SCENARIO("order books can have orders added", "[orderbook]")
     {
         static constexpr int base = 100;
         static constexpr int size = 20;
-        jazzy::order_book<int, jazzy::tests::order> book{base, size};
+        jazzy::order_book<int, jazzy::tests::order, size> book{base};
 
         REQUIRE(book.size() == size);
         REQUIRE(book.base() == base);
