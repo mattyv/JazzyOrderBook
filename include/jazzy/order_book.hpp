@@ -31,9 +31,9 @@ public:
     using value_type = OrderType;
     using size_type = size_t;
 
-    order_book(tick_type bid_base_val, tick_type ask_base_val)
-        : bid_base_value_{std::move(bid_base_val)}
-        , ask_base_value_{std::move(ask_base_val)}
+    order_book(tick_type bid_base_value, tick_type ask_base_value)
+        : bid_base_value_{std::move(bid_base_value)}
+        , ask_base_value_{std::move(ask_base_value)}
     {
         bids_.resize(Depth);
         asks_.resize(Depth);
@@ -187,8 +187,8 @@ public:
     [[nodiscard]] size_type constexpr size() const noexcept { return Depth; }
     [[nodiscard]] tick_type bid_base_value() const noexcept { return bid_base_value_; }
     [[nodiscard]] tick_type ask_base_value() const noexcept { return ask_base_value_; }
-    [[nodiscard]] size_type low() const noexcept { return 0; }
-    [[nodiscard]] size_type high() const noexcept { return Depth - 1; }
+    [[nodiscard]] size_type constexpr low() const noexcept { return 0; }
+    [[nodiscard]] size_type constexpr high() const noexcept { return Depth - 1; }
 
     // Legacy compatibility - returns bid base value
     [[nodiscard]] tick_type base() const noexcept { return bid_base_value_; }
