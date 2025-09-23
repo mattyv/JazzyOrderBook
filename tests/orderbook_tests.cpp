@@ -11,7 +11,7 @@ SCENARIO("order books can have bid orders added", "[orderbook]")
         jazzy::order_book<int, jazzy::tests::order, size> book{base, 0};
 
         REQUIRE(book.size() == size);
-        REQUIRE(book.bidBaseValue() == base);
+        REQUIRE(book.bid_base_value() == base);
 
         WHEN("A buy side order is added")
         {
@@ -50,7 +50,7 @@ SCENARIO("order books can have bid orders added", "[orderbook]")
         jazzy::order_book<int, jazzy::tests::order, size> book{base, 0};
 
         REQUIRE(book.size() == size);
-        REQUIRE(book.bidBaseValue() == base);
+        REQUIRE(book.bid_base_value() == base);
 
         book.insert_bid(101, jazzy::tests::order{.order_id = 1, .volume = 1});
         book.insert_bid(102, jazzy::tests::order{.order_id = 2, .volume = 2});
@@ -115,7 +115,7 @@ SCENARIO("order books can have ask orders added", "[orderbook]")
         jazzy::order_book<int, jazzy::tests::order, size> book{0, base};
 
         REQUIRE(book.size() == size);
-        REQUIRE(book.askBaseValue() == base);
+        REQUIRE(book.ask_base_value() == base);
 
         WHEN("A sell side order is added")
         {
@@ -153,7 +153,7 @@ SCENARIO("order books can have ask orders added", "[orderbook]")
         jazzy::order_book<int, jazzy::tests::order, size> book{0, base};
 
         REQUIRE(book.size() == size);
-        REQUIRE(book.askBaseValue() == base);
+        REQUIRE(book.ask_base_value() == base);
 
         book.insert_ask(115, jazzy::tests::order{.order_id = 1, .volume = 1});
         book.insert_ask(116, jazzy::tests::order{.order_id = 2, .volume = 2});
