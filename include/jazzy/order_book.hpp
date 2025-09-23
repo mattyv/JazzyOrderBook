@@ -25,24 +25,6 @@ struct order_volume_getter
     }
 };
 
-struct order_side_getter
-{
-    template <typename T>
-    constexpr auto operator()(T const& obj) const
-    {
-        return jazzy_order_side_getter(obj);
-    }
-};
-
-struct order_update_type_getter
-{
-    template <typename T>
-    constexpr auto operator()(T const& obj) const
-    {
-        return jazzy_order_update_type_getter(obj);
-    }
-};
-
 } // namespace detail
 
 template <typename T>
@@ -50,12 +32,6 @@ using order_id_type = decltype(detail::order_id_getter{}(std::declval<T>()));
 
 template <typename T>
 using order_volume_type = decltype(detail::order_volume_getter{}(std::declval<T>()));
-
-template <typename T>
-using order_side_type = decltype(detail::order_side_getter{}(std::declval<T>()));
-
-template <typename T>
-using order_update_type = decltype(detail::order_update_type_getter{}(std::declval<T>()));
 
 template <typename T>
 concept order = requires(T const& order) {
@@ -69,7 +45,6 @@ concept order = requires(T const& order) {
 
 constexpr detail::order_id_getter order_id_getter;
 constexpr detail::order_volume_getter order_volume_getter;
-constexpr detail::order_side_getter order_side_getter;
 
 template <typename TickType, typename OrderType>
 requires order<OrderType> && std::integral<TickType>
