@@ -1,64 +1,12 @@
 #pragma once
 
-#include <concepts>
-#include <iostream>
+#include <jazzy/traits.hpp>
+
+#include <stdexcept>
 #include <unordered_map>
 #include <vector>
 
 namespace jazzy {
-namespace detail {
-
-struct order_id_getter
-{
-    template <typename T>
-    constexpr auto operator()(T const& obj) const
-    {
-        return jazzy_order_id_getter(obj);
-    }
-};
-
-struct order_volume_getter
-{
-    template <typename T>
-    constexpr auto operator()(T const& obj) const
-    {
-        return jazzy_order_volume_getter(obj);
-    }
-};
-
-struct order_volume_setter
-{
-    template <typename T, typename U>
-    constexpr void operator()(T& obj, U const& value) const
-    {
-        jazzy_order_volume_setter(obj, value);
-    }
-};
-
-} // namespace detail
-
-template <typename T>
-using order_id_type = decltype(detail::order_id_getter{}(std::declval<T>()));
-
-template <typename T>
-using order_volume_type = decltype(detail::order_volume_getter{}(std::declval<T>()));
-
-template <typename T>
-concept order = requires(T const& order) {
-    { detail::order_id_getter{}(order) } -> std::same_as<order_id_type<T>>;
-    { detail::order_volume_getter{}(order) } -> std::same_as<order_volume_type<T>>;
-    // Volume type must be addable
-    requires requires(order_volume_type<T> v1, order_volume_type<T> v2) {
-        { v1 + v2 } -> std::same_as<order_volume_type<T>>;
-    };
-};
-
-template <typename T>
-concept tick = std::integral<T> && std::convertible_to<T, size_t>;
-
-constexpr detail::order_id_getter order_id_getter;
-constexpr detail::order_volume_getter order_volume_getter;
-constexpr detail::order_volume_setter order_volume_setter;
 
 template <typename TickType, typename OrderType, size_t Depth = 64>
 requires tick<TickType> && order<OrderType>
@@ -243,10 +191,11 @@ public:
     [[nodiscard]] size_type constexpr size() const noexcept { return Depth; }
     [[nodiscard]] tick_type bidBaseValue() const noexcept { return bidBaseValue_; }
     [[nodiscard]] tick_type askBaseValue() const noexcept { return askBaseValue_; }
+    [[nodiscard]] size_type low() const noexcept { return 0; }
+    [[nodiscard]] size_type high() const noexcept { return Depth - 1; }
 
     // Legacy compatibility - returns bid base value
-    [[nodiscard]] tick_type baseValue() const noexcept { return bidBaseValue_; }
-
+    [[nodiscard]] tick_type base() const noexcept { return bidBaseValue_; }
 private:
     template <bool is_bid>
     constexpr size_t tick_to_index(tick_type tick_value) const // pass by value is integral
