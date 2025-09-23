@@ -18,14 +18,31 @@ if [ -z "$staged_files" ]; then
     exit 0
 fi
 
+# Files to exclude from formatting
+exclude_files=(
+    "tests/catch.hpp"
+    "external/*"
+)
+
 echo "Running clang-format on staged C++ files..."
 
 # Track if any files were reformatted
 reformatted_files=()
 
+# Function to check if file should be excluded
+should_exclude() {
+    local file="$1"
+    for pattern in "${exclude_files[@]}"; do
+        if [[ "$file" == $pattern ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
 # Format each staged C++ file
 for file in $staged_files; do
-    if [ -f "$file" ]; then
+    if [ -f "$file" ] && ! should_exclude "$file"; then
         # Create a temporary file to check if formatting changes anything
         temp_file=$(mktemp)
         clang-format "$file" > "$temp_file"
