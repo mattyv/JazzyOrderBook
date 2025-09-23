@@ -64,7 +64,7 @@ class order_book
 
     using bid_storage = std::vector<level>;
     using ask_storage = std::vector<level>;
-    using order_storage = std::unordered_map<id_type, level>;
+    using order_storage = std::unordered_map<id_type, order_type>;
 
 public:
     using value_type = OrderType;
@@ -139,6 +139,18 @@ public:
     {
         std::cout << "REMOVE ASK - OrderId: " << order_id_getter(order) << std::endl;
         // TODO: Remove ask from price level
+    }
+
+    volume_type bid_volume_at_tick(tick_type tick_value)
+    {
+        auto offset = (tick_value - base_);
+        return bids_[start_ + offset].volume;
+    }
+
+    volume_type ask_volume_at_tick(tick_type tick_value)
+    {
+        auto offset = (tick_value - base_);
+        return asks_[start_ + offset].volume;
     }
 
     [[nodiscard]] size_type size() const noexcept { return size_; }

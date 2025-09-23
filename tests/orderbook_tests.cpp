@@ -5,7 +5,7 @@ namespace jazzy::tests {
 struct order
 {
     int order_id{};
-    size_t volume{};
+    int volume{};
 };
 
 int jazzy_order_id_getter(order const& o) { return o.order_id; }
@@ -24,9 +24,11 @@ SCENARIO("order books can have orders added", "[orderbook]")
         REQUIRE(book.size() == size);
         REQUIRE(book.base() == base);
 
-        WHEN("An order is added")
+        WHEN("An buy side order is added")
         {
-            THEN("Then the level should reflect the quantity") {}
+            book.insert_bid(101, jazzy::tests::order{.order_id = 1, .volume = 10});
+
+            THEN("Then the level should reflect the quantity") { REQUIRE(book.bid_volume_at_tick(101) == 10); }
         }
     }
 }
