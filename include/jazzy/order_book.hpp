@@ -1,6 +1,5 @@
 #pragma once
 
-#include <bitset>
 #include <concepts>
 #include <iostream>
 #include <unordered_map>
@@ -79,7 +78,6 @@ class order_book
     using bid_storage = std::vector<level>;
     using ask_storage = std::vector<level>;
     using order_storage = std::unordered_map<id_type, order_type>;
-    using bitset_type = std::bitset<Depth>;
 
 public:
     using value_type = OrderType;
