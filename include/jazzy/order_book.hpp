@@ -55,13 +55,24 @@ constexpr detail::order_id_getter order_id_getter;
 constexpr detail::order_volume_getter order_volume_getter;
 constexpr detail::order_side_getter order_side_getter;
 
-template <typename T>
-requires order<T>
+template <typename TBaseType, typename TickType, typename OrderType>
+requires order<OrderType> && std::integral<TickType>
 class order_book
 {
+    using order_type = OrderType;
+    using tick_type = TickType;
+    using base_type = TickType;
+    using volume_type = order_volume_type<order_type>;
+
+    struct level {
+        volume_type volume{}; 
+    };
+
+    using bid_storage = std::vector<level>;
+    using ask_storage = std::vector<level>;
+
 public:
-    using value_type = T;
-    using order_type = T;
+    using value_type = OrderType;
 
     template <typename U>
     requires order<U> && std::same_as<order_type, std::decay_t<U>>
@@ -70,6 +81,10 @@ public:
         std::cout << "OrderId: " << order_id_getter(order) << std::endl;
         std::cout << "Order Volume: " << order_volume_getter(order) << std::endl;
     }
+
+private:
+    bid_storage bids_;
+    ask_storage asks_;
 };
 
 } // namespace jazzy
