@@ -32,19 +32,19 @@ if [[ -f "$BEST_FILE" ]]; then
     case "$choice" in
         [Nn]*)
             mv "$NEW_FILE" "$BEST_FILE"
-            echo "✅ New results saved as best"
+            echo "New results saved as best"
             ;;
         [Qq]*)
             rm "$NEW_FILE"
-            echo "🚫 Exiting without saving"
+            echo "Exiting without saving"
             ;;
         *)
             rm "$NEW_FILE"
-            echo "❌ Keeping existing best"
+            echo "Keeping existing best"
             ;;
     esac
 else
     echo "No existing best found - saving as best"
     mv "$NEW_FILE" "$BEST_FILE"
-    echo "✅ Results saved as best"
+    echo "Results saved as best"
 fi
