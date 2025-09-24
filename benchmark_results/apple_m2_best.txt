@@ -1,45 +1,45 @@
--------------------------------------------------------------------------------
-Benchmark                                     Time             CPU   Iterations
--------------------------------------------------------------------------------
-BM_VectorOrderBook_AddOrders/8              418 ns          418 ns      1678432
-BM_VectorOrderBook_AddOrders/64            2624 ns         2624 ns       266908
-BM_VectorOrderBook_AddOrders/512          20945 ns        20943 ns        33433
-BM_VectorOrderBook_AddOrders/4096        206998 ns       179290 ns         4008
-BM_VectorOrderBook_AddOrders/8192        354209 ns       352681 ns         1987
-BM_VectorOrderBook_AddOrders_BigO         44.69 N         43.19 N    
-BM_VectorOrderBook_AddOrders_RMS             10 %             1 %    
-BM_MapOrderBook_AddOrders/8                 637 ns          637 ns      1098901
-BM_MapOrderBook_AddOrders/64               5154 ns         5153 ns       135659
-BM_MapOrderBook_AddOrders/512             34675 ns        34673 ns        20190
-BM_MapOrderBook_AddOrders/4096           269279 ns       269262 ns         2592
-BM_MapOrderBook_AddOrders/8192           541423 ns       541350 ns         1286
-BM_MapOrderBook_AddOrders_BigO            66.03 N         66.02 N    
-BM_MapOrderBook_AddOrders_RMS                 0 %             0 %    
-BM_VectorOrderBook_VolumeLookup/8          3.67 ns         3.67 ns    189575000
-BM_VectorOrderBook_VolumeLookup/64         35.4 ns         35.4 ns     19738048
-BM_VectorOrderBook_VolumeLookup/512         332 ns          332 ns      2114242
-BM_VectorOrderBook_VolumeLookup/4096       2632 ns         2632 ns       266481
-BM_VectorOrderBook_VolumeLookup/8192       5339 ns         5315 ns       132974
-BM_VectorOrderBook_VolumeLookup_BigO       0.65 N          0.65 N    
-BM_VectorOrderBook_VolumeLookup_RMS           1 %             1 %    
-BM_MapOrderBook_VolumeLookup/8             42.0 ns         42.0 ns     23404561
-BM_MapOrderBook_VolumeLookup/64             515 ns          515 ns      1315517
-BM_MapOrderBook_VolumeLookup/512           4872 ns         4871 ns       146176
-BM_MapOrderBook_VolumeLookup/4096         77348 ns        77345 ns         8812
-BM_MapOrderBook_VolumeLookup/8192        169353 ns       169346 ns         4102
-BM_MapOrderBook_VolumeLookup_BigO          1.59 NlgN       1.59 NlgN 
-BM_MapOrderBook_VolumeLookup_RMS              2 %             2 %    
-BM_VectorOrderBook_MixedOps/8               494 ns          494 ns      1419075
-BM_VectorOrderBook_MixedOps/64             2997 ns         2997 ns       233560
-BM_VectorOrderBook_MixedOps/512           22631 ns        22630 ns        30929
-BM_VectorOrderBook_MixedOps/4096         176851 ns       176846 ns         3960
-BM_VectorOrderBook_MixedOps/8192         353652 ns       353642 ns         1981
-BM_VectorOrderBook_MixedOps_BigO          43.18 N         43.17 N    
-BM_VectorOrderBook_MixedOps_RMS               0 %             0 %    
-BM_MapOrderBook_MixedOps/8                  638 ns          638 ns      1096869
-BM_MapOrderBook_MixedOps/64                5132 ns         5132 ns       136386
-BM_MapOrderBook_MixedOps/512              38108 ns        38107 ns        18372
-BM_MapOrderBook_MixedOps/4096            267480 ns       267472 ns         2616
-BM_MapOrderBook_MixedOps/8192            527015 ns       527002 ns         1329
-BM_MapOrderBook_MixedOps_BigO             64.56 N         64.56 N    
-BM_MapOrderBook_MixedOps_RMS                  2 %             2 %    
+------------------------------------------------------------------------------
+Benchmark                                    Time             CPU   Iterations
+------------------------------------------------------------------------------
+BM_JazzyOrderBook_AddOrders/8              416 ns          416 ns      1701685
+BM_JazzyOrderBook_AddOrders/64            2638 ns         2637 ns       268840
+BM_JazzyOrderBook_AddOrders/512          20616 ns        20615 ns        33868
+BM_JazzyOrderBook_AddOrders/4096        174781 ns       174619 ns         4033
+BM_JazzyOrderBook_AddOrders/8192        353558 ns       353490 ns         1987
+BM_JazzyOrderBook_AddOrders_BigO         43.05 N         43.04 N    
+BM_JazzyOrderBook_AddOrders_RMS              1 %             1 %    
+BM_MapOrderBook_AddOrders/8                636 ns          636 ns      1093408
+BM_MapOrderBook_AddOrders/64              5185 ns         5185 ns       134872
+BM_MapOrderBook_AddOrders/512            34775 ns        34775 ns        20128
+BM_MapOrderBook_AddOrders/4096          271357 ns       271355 ns         2582
+BM_MapOrderBook_AddOrders/8192          537273 ns       537264 ns         1293
+BM_MapOrderBook_AddOrders_BigO           65.73 N         65.72 N    
+BM_MapOrderBook_AddOrders_RMS                1 %             1 %    
+BM_JazzyOrderBook_VolumeLookup/8          3.68 ns         3.68 ns    192298183
+BM_JazzyOrderBook_VolumeLookup/64         35.4 ns         35.4 ns     19792518
+BM_JazzyOrderBook_VolumeLookup/512         331 ns          331 ns      2131761
+BM_JazzyOrderBook_VolumeLookup/4096       2628 ns         2628 ns       265948
+BM_JazzyOrderBook_VolumeLookup/8192       5265 ns         5265 ns       132951
+BM_JazzyOrderBook_VolumeLookup_BigO       0.64 N          0.64 N    
+BM_JazzyOrderBook_VolumeLookup_RMS           0 %             0 %    
+BM_MapOrderBook_VolumeLookup/8            39.2 ns         39.2 ns     19711425
+BM_MapOrderBook_VolumeLookup/64            515 ns          515 ns      1354515
+BM_MapOrderBook_VolumeLookup/512          4704 ns         4704 ns       150275
+BM_MapOrderBook_VolumeLookup/4096        75142 ns        75141 ns         8941
+BM_MapOrderBook_VolumeLookup/8192       170232 ns       170231 ns         4093
+BM_MapOrderBook_VolumeLookup_BigO         1.59 NlgN       1.59 NlgN 
+BM_MapOrderBook_VolumeLookup_RMS             4 %             4 %    
+BM_JazzyOrderBook_MixedOps/8               494 ns          494 ns      1427811
+BM_JazzyOrderBook_MixedOps/64             2968 ns         2968 ns       236804
+BM_JazzyOrderBook_MixedOps/512           22272 ns        22272 ns        31421
+BM_JazzyOrderBook_MixedOps/4096         175348 ns       175347 ns         3984
+BM_JazzyOrderBook_MixedOps/8192         351922 ns       351919 ns         1989
+BM_JazzyOrderBook_MixedOps_BigO          42.93 N         42.93 N    
+BM_JazzyOrderBook_MixedOps_RMS               0 %             0 %    
+BM_MapOrderBook_MixedOps/8                 632 ns          632 ns      1108016
+BM_MapOrderBook_MixedOps/64               5027 ns         5027 ns       139082
+BM_MapOrderBook_MixedOps/512             37416 ns        37416 ns        18685
+BM_MapOrderBook_MixedOps/4096           263269 ns       263266 ns         2658
+BM_MapOrderBook_MixedOps/8192           520436 ns       520431 ns         1344
+BM_MapOrderBook_MixedOps_BigO            63.71 N         63.71 N    
+BM_MapOrderBook_MixedOps_RMS                 2 %             2 %    

@@ -41,7 +41,7 @@ void add_random_order(BookType& book, const jazzy::tests::order& order)
 }
 
 // Benchmark: Adding orders to empty order book
-static void BM_VectorOrderBook_AddOrders(benchmark::State& state)
+static void BM_JazzyOrderBook_AddOrders(benchmark::State& state)
 {
     for (auto _ : state)
     {
@@ -78,7 +78,7 @@ static void BM_MapOrderBook_AddOrders(benchmark::State& state)
 }
 
 // Benchmark: Volume lookups in populated order book
-static void BM_VectorOrderBook_VolumeLookup(benchmark::State& state)
+static void BM_JazzyOrderBook_VolumeLookup(benchmark::State& state)
 {
     VectorOrderBook book{};
     std::vector<int> ticks;
@@ -139,7 +139,7 @@ static void BM_MapOrderBook_VolumeLookup(benchmark::State& state)
 }
 
 // Benchmark: Mixed operations (add/update/remove)
-static void BM_VectorOrderBook_MixedOps(benchmark::State& state)
+static void BM_JazzyOrderBook_MixedOps(benchmark::State& state)
 {
     for (auto _ : state)
     {
@@ -274,13 +274,13 @@ static void BM_MapOrderBook_MixedOps(benchmark::State& state)
 }
 
 // Register benchmarks with various sizes
-BENCHMARK(BM_VectorOrderBook_AddOrders)->Range(8, 8 << 10)->Complexity();
+BENCHMARK(BM_JazzyOrderBook_AddOrders)->Range(8, 8 << 10)->Complexity();
 BENCHMARK(BM_MapOrderBook_AddOrders)->Range(8, 8 << 10)->Complexity();
 
-BENCHMARK(BM_VectorOrderBook_VolumeLookup)->Range(8, 8 << 10)->Complexity();
+BENCHMARK(BM_JazzyOrderBook_VolumeLookup)->Range(8, 8 << 10)->Complexity();
 BENCHMARK(BM_MapOrderBook_VolumeLookup)->Range(8, 8 << 10)->Complexity();
 
-BENCHMARK(BM_VectorOrderBook_MixedOps)->Range(8, 8 << 10)->Complexity();
+BENCHMARK(BM_JazzyOrderBook_MixedOps)->Range(8, 8 << 10)->Complexity();
 BENCHMARK(BM_MapOrderBook_MixedOps)->Range(8, 8 << 10)->Complexity();
 
 BENCHMARK_MAIN();
