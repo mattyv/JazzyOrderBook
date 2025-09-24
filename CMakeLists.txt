@@ -14,3 +14,4 @@ target_compile_features(${PROJECT_NAME} INTERFACE cxx_std_23)
 
 add_subdirectory(external)
 add_subdirectory(tests)
+add_subdirectory(benchmarks)
