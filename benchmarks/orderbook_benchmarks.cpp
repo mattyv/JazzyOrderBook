@@ -273,12 +273,214 @@ static void BM_MapOrderBook_MixedOps(benchmark::State& state)
     state.SetComplexityN(state.range(0));
 }
 
+// Benchmark: Update orders in populated order book
+static void BM_JazzyOrderBook_UpdateOrders(benchmark::State& state)
+{
+    VectorOrderBook book{};
+    std::vector<jazzy::tests::order> orders;
+
+    // Pre-populate the order book
+    for (int i = 0; i < state.range(0); ++i)
+    {
+        auto order = generate_random_order(i);
+        orders.push_back(order);
+        add_random_order(book, order);
+    }
+
+    for (auto _ : state)
+    {
+        // Update each order with new volume
+        for (auto& order : orders)
+        {
+            std::uniform_int_distribution<int> volume_dist(1, 1000);
+            order.volume = volume_dist(gen);
+
+            std::uniform_int_distribution<int> side_dist(0, 1);
+            if (side_dist(gen) == 0)
+            {
+                book.update_bid(order.tick, order);
+            }
+            else
+            {
+                book.update_ask(order.tick, order);
+            }
+        }
+        benchmark::DoNotOptimize(book);
+    }
+    state.SetComplexityN(state.range(0));
+}
+
+static void BM_MapOrderBook_UpdateOrders(benchmark::State& state)
+{
+    MapOrderBook book{};
+    std::vector<jazzy::tests::order> orders;
+
+    // Pre-populate the order book
+    for (int i = 0; i < state.range(0); ++i)
+    {
+        auto order = generate_random_order(i);
+        orders.push_back(order);
+        add_random_order(book, order);
+    }
+
+    for (auto _ : state)
+    {
+        // Update each order with new volume
+        for (auto& order : orders)
+        {
+            std::uniform_int_distribution<int> volume_dist(1, 1000);
+            order.volume = volume_dist(gen);
+
+            std::uniform_int_distribution<int> side_dist(0, 1);
+            if (side_dist(gen) == 0)
+            {
+                book.update_bid(order.tick, order);
+            }
+            else
+            {
+                book.update_ask(order.tick, order);
+            }
+        }
+        benchmark::DoNotOptimize(book);
+    }
+    state.SetComplexityN(state.range(0));
+}
+
+// Benchmark: Delete orders from populated order book
+static void BM_JazzyOrderBook_DeleteOrders(benchmark::State& state)
+{
+    for (auto _ : state)
+    {
+        VectorOrderBook book{};
+        std::vector<jazzy::tests::order> orders;
+
+        // Pre-populate the order book
+        for (int i = 0; i < state.range(0); ++i)
+        {
+            auto order = generate_random_order(i);
+            orders.push_back(order);
+            add_random_order(book, order);
+        }
+
+        // Time the deletion of all orders
+        for (const auto& order : orders)
+        {
+            std::uniform_int_distribution<int> side_dist(0, 1);
+            if (side_dist(gen) == 0)
+            {
+                book.remove_bid(order.tick, order);
+            }
+            else
+            {
+                book.remove_ask(order.tick, order);
+            }
+        }
+        benchmark::DoNotOptimize(book);
+    }
+    state.SetComplexityN(state.range(0));
+}
+
+static void BM_MapOrderBook_DeleteOrders(benchmark::State& state)
+{
+    for (auto _ : state)
+    {
+        MapOrderBook book{};
+        std::vector<jazzy::tests::order> orders;
+
+        // Pre-populate the order book
+        for (int i = 0; i < state.range(0); ++i)
+        {
+            auto order = generate_random_order(i);
+            orders.push_back(order);
+            add_random_order(book, order);
+        }
+
+        // Time the deletion of all orders
+        for (const auto& order : orders)
+        {
+            std::uniform_int_distribution<int> side_dist(0, 1);
+            if (side_dist(gen) == 0)
+            {
+                book.remove_bid(order.tick, order);
+            }
+            else
+            {
+                book.remove_ask(order.tick, order);
+            }
+        }
+        benchmark::DoNotOptimize(book);
+    }
+    state.SetComplexityN(state.range(0));
+}
+
+// Benchmark: Get order at level operations
+static void BM_JazzyOrderBook_GetOrderAtLevel(benchmark::State& state)
+{
+    VectorOrderBook book{};
+
+    // Pre-populate the order book with orders at different levels
+    for (int i = 0; i < state.range(0); ++i)
+    {
+        auto order = generate_random_order(i);
+        add_random_order(book, order);
+    }
+
+    for (auto _ : state)
+    {
+        // Access orders at different levels
+        const int max_levels = std::min(static_cast<int>(state.range(0) / 4), 50);
+        for (int level = 0; level < max_levels; ++level)
+        {
+            auto bid_order = book.bid_at_level(level);
+            auto ask_order = book.ask_at_level(level);
+            benchmark::DoNotOptimize(bid_order);
+            benchmark::DoNotOptimize(ask_order);
+        }
+    }
+    state.SetComplexityN(state.range(0));
+}
+
+static void BM_MapOrderBook_GetOrderAtLevel(benchmark::State& state)
+{
+    MapOrderBook book{};
+
+    // Pre-populate the order book with orders at different levels
+    for (int i = 0; i < state.range(0); ++i)
+    {
+        auto order = generate_random_order(i);
+        add_random_order(book, order);
+    }
+
+    for (auto _ : state)
+    {
+        // Access orders at different levels
+        const int max_levels = std::min(static_cast<int>(state.range(0) / 4), 50);
+        for (int level = 0; level < max_levels; ++level)
+        {
+            auto bid_order = book.bid_at_level(level);
+            auto ask_order = book.ask_at_level(level);
+            benchmark::DoNotOptimize(bid_order);
+            benchmark::DoNotOptimize(ask_order);
+        }
+    }
+    state.SetComplexityN(state.range(0));
+}
+
 // Register benchmarks with various sizes
 BENCHMARK(BM_JazzyOrderBook_AddOrders)->Range(8, 8 << 10)->Complexity();
 BENCHMARK(BM_MapOrderBook_AddOrders)->Range(8, 8 << 10)->Complexity();
 
+BENCHMARK(BM_JazzyOrderBook_UpdateOrders)->Range(8, 8 << 10)->Complexity();
+BENCHMARK(BM_MapOrderBook_UpdateOrders)->Range(8, 8 << 10)->Complexity();
+
+BENCHMARK(BM_JazzyOrderBook_DeleteOrders)->Range(8, 8 << 10)->Complexity();
+BENCHMARK(BM_MapOrderBook_DeleteOrders)->Range(8, 8 << 10)->Complexity();
+
 BENCHMARK(BM_JazzyOrderBook_VolumeLookup)->Range(8, 8 << 10)->Complexity();
 BENCHMARK(BM_MapOrderBook_VolumeLookup)->Range(8, 8 << 10)->Complexity();
+
+BENCHMARK(BM_JazzyOrderBook_GetOrderAtLevel)->Range(8, 8 << 10)->Complexity();
+BENCHMARK(BM_MapOrderBook_GetOrderAtLevel)->Range(8, 8 << 10)->Complexity();
 
 BENCHMARK(BM_JazzyOrderBook_MixedOps)->Range(8, 8 << 10)->Complexity();
 BENCHMARK(BM_MapOrderBook_MixedOps)->Range(8, 8 << 10)->Complexity();
