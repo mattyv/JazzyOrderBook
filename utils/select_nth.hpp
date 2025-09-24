@@ -27,7 +27,9 @@
 
 #include <array>
 #include <bit>
+#include <bitset>
 #include <cstdint>
+#include <iostream>
 #include <stdexcept>
 
 #if defined(__x86_64__) || defined(_M_X64)
@@ -43,12 +45,14 @@ namespace select64 {
 
 // Build a 256-entry table where POP8[v] = number of 1-bits in the 8-bit value
 // v. Computed at compile-time with constexpr; no runtime construction cost.
-constexpr std::array<uint8_t, 256> make_pop8() {
-  std::array<uint8_t, 256> t{};
-  for (int v = 0; v < 256; ++v) {
-    t[v] = static_cast<uint8_t>(std::popcount(static_cast<uint8_t>(v)));
-  }
-  return t;
+constexpr std::array<uint8_t, 256> make_pop8()
+{
+    std::array<uint8_t, 256> t{};
+    for (int v = 0; v < 256; ++v)
+    {
+        t[v] = static_cast<uint8_t>(std::popcount(static_cast<uint8_t>(v)));
+    }
+    return t;
 }
 constexpr auto POP8 = make_pop8();
 
@@ -56,20 +60,24 @@ constexpr auto POP8 = make_pop8();
 // For each 8-bit value v, SEL8[v][k] gives the bit index (0..7) of the k-th
 // 1-bit in v, counting from least significant to most significant. If k is out
 // of range for v, the entry is filled with 0xFF (unused).
-constexpr std::array<std::array<uint8_t, 8>, 256> make_sel8() {
-  std::array<std::array<uint8_t, 8>, 256> T{};
-  for (int v = 0; v < 256; ++v) {
-    uint8_t x = static_cast<uint8_t>(v);
-    uint8_t k = 0;
-    for (uint8_t b = 0; b < 8; ++b) {
-      if (x & (1u << b)) {
-        T[v][k++] = b;
-      }
+constexpr std::array<std::array<uint8_t, 8>, 256> make_sel8()
+{
+    std::array<std::array<uint8_t, 8>, 256> T{};
+    for (int v = 0; v < 256; ++v)
+    {
+        uint8_t x = static_cast<uint8_t>(v);
+        uint8_t k = 0;
+        for (uint8_t b = 0; b < 8; ++b)
+        {
+            if (x & (1u << b))
+            {
+                T[v][k++] = b;
+            }
+        }
+        for (; k < 8; ++k)
+            T[v][k] = 0xFF;
     }
-    for (; k < 8; ++k)
-      T[v][k] = 0xFF;
-  }
-  return T;
+    return T;
 }
 constexpr auto SEL8 = make_sel8();
 
@@ -77,30 +85,32 @@ constexpr auto SEL8 = make_sel8();
 // - Examines at most 8 bytes (fixed small work).
 // - Works on any platform.
 // Precondition: 0 <= n < popcount(mask), otherwise throws.
-inline int select_nth_set_bit_portable(uint64_t mask, unsigned n) {
-  const unsigned total = std::popcount(mask);
-  if (n >= total)
-    throw std::out_of_range("n out of range");
+inline int select_nth_set_bit_portable(uint64_t mask, unsigned n)
+{
+    const unsigned total = std::popcount(mask);
+    if (n >= total)
+        throw std::out_of_range("n out of range");
 
-  // Scan bytes from least-significant to most-significant.
-  for (int byte = 0; byte < 8; ++byte) {
-    uint8_t m = static_cast<uint8_t>(mask); // current low byte
-    uint8_t pc = POP8[m];                   // number of 1-bits in this byte
+    // Scan bytes from least-significant to most-significant.
+    for (int byte = 0; byte < 8; ++byte)
+    {
+        uint8_t m = static_cast<uint8_t>(mask); // current low byte
+        uint8_t pc = POP8[m]; // number of 1-bits in this byte
 
-    if (n < pc) {
-      // The target is inside this byte: use SEL8 to find which bit.
-      uint8_t bit_in_byte = SEL8[m][n];
-      return byte * 8 + bit_in_byte;
+        if (n < pc)
+        {
+            // The target is inside this byte: use SEL8 to find which bit.
+            uint8_t bit_in_byte = SEL8[m][n];
+            return byte * 8 + bit_in_byte;
+        }
+
+        // Skip all 1-bits in this byte and move on.
+        n -= pc;
+        mask >>= 8;
     }
 
-    // Skip all 1-bits in this byte and move on.
-    n -= pc;
-    mask >>= 8;
-  }
-
-  // With valid inputs, we should never reach here.
-  throw std::logic_error(
-      "Internal error: exhausted all bytes without finding target bit");
+    // With valid inputs, we should never reach here.
+    throw std::logic_error("Internal error: exhausted all bytes without finding target bit");
 }
 
 // ---------- x86-64: BMI2 detection and fast path ----------
@@ -109,18 +119,19 @@ inline int select_nth_set_bit_portable(uint64_t mask, unsigned n) {
 
 // Query CPU features via CPUID to see if BMI2 is available.
 // Returns true if BMI2 is supported by the running CPU.
-inline bool cpu_has_bmi2() {
+inline bool cpu_has_bmi2()
+{
 // GCC/Clang on Linux: use __get_cpuid_count. If unavailable, conservatively
 // return false.
 #if defined(__GNUC__) || defined(__clang__)
-  unsigned eax = 0, ebx = 0, ecx = 0, edx = 0;
-  // CPUID leaf 7, subleaf 0: EBX bit 8 indicates BMI2 support.
-  if (!__get_cpuid_count(7, 0, &eax, &ebx, &ecx, &edx))
-    return false;
-  return (ebx & (1u << 8)) != 0;
+    unsigned eax = 0, ebx = 0, ecx = 0, edx = 0;
+    // CPUID leaf 7, subleaf 0: EBX bit 8 indicates BMI2 support.
+    if (!__get_cpuid_count(7, 0, &eax, &ebx, &ecx, &edx))
+        return false;
+    return (ebx & (1u << 8)) != 0;
 #else
-  // On other toolchains, skip CPUID; fallback path will be used.
-  return false;
+    // On other toolchains, skip CPUID; fallback path will be used.
+    return false;
 #endif
 }
 
@@ -129,38 +140,113 @@ inline bool cpu_has_bmi2() {
 // position of 'mask'.
 // - countr_zero then returns its index.
 // Precondition: 0 <= n < popcount(mask), otherwise throws.
-inline int select_nth_set_bit_bmi2(uint64_t mask, unsigned n) {
-  const unsigned total = std::popcount(mask);
-  if (n >= total)
-    throw std::out_of_range("n out of range");
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((target("bmi2")))
+#endif
+inline int
+select_nth_set_bit_bmi2(uint64_t mask, unsigned n)
+{
+    const unsigned total = std::popcount(mask);
+    if (n >= total)
+        throw std::out_of_range("n out of range");
 
-  // Build a word with a single 1 at position n (safe because n < total <= 64).
-  uint64_t single = 1ull << n;
+    // Build a word with a single 1 at position n (safe because n < total <= 64).
+    uint64_t single = 1ull << n;
 
-  // Route that bit through the 1-bit positions of mask: result has exactly one
-  // 1-bit.
-  uint64_t routed = _pdep_u64(single, mask);
+    // Route that bit through the 1-bit positions of mask: result has exactly one
+    // 1-bit.
+    uint64_t routed = _pdep_u64(single, mask);
 
-  // Index of that single 1-bit equals the number of trailing zeros.
-  return std::countr_zero(routed);
+    // Index of that single 1-bit equals the number of trailing zeros.
+    return std::countr_zero(routed);
 }
 
 #endif // x86-64
+
+// ---------- std::bitset support with _Find_next optimization ----------
+
+// Build-time message for implementation choice
+#if defined(__GLIBCXX__) || defined(_GLIBCXX_BITSET)
+#pragma message("Using libstdc++ with _Find_next() optimization for bitset operations")
+#define HAS_FIND_NEXT 1
+#else
+#pragma message("Using portable bitset implementation without _Find_next()")
+#define HAS_FIND_NEXT 0
+#endif
+
+// Template function for finding nth set bit in std::bitset
+template <size_t N>
+[[nodiscard]] inline int select_nth_set_bit(const std::bitset<N>& bitset, unsigned n)
+{
+    const unsigned total = static_cast<unsigned>(bitset.count());
+    if (n >= total)
+    {
+        throw std::out_of_range("n out of range");
+    }
+
+#if HAS_FIND_NEXT
+    // libstdc++ implementation with _Find_next()
+    std::cout << "Using _Find_next() optimization\n";
+    size_t current_pos = 0;
+    for (unsigned count = 0; count <= n; ++count)
+    {
+        if (count == 0)
+        {
+            // Find first set bit
+            current_pos = bitset._Find_first();
+        }
+        else
+        {
+            // Find next set bit after current_pos
+            current_pos = bitset._Find_next(current_pos);
+        }
+
+        if (current_pos >= N)
+        {
+            throw std::out_of_range("n out of range");
+        }
+
+        if (count == n)
+        {
+            return static_cast<int>(current_pos);
+        }
+    }
+#else
+    // Portable fallback implementation
+    std::cout << "Using portable bitset scan\n";
+    unsigned count = 0;
+    for (size_t i = 0; i < N; ++i)
+    {
+        if (bitset[i])
+        {
+            if (count == n)
+            {
+                return static_cast<int>(i);
+            }
+            ++count;
+        }
+    }
+#endif
+
+    throw std::logic_error("Internal error: should not reach here");
+}
 
 // ---------- Public API: pick best available path ----------
 
 // Returns index (0..63) of the n-th set bit; throws if n is out of range.
 // - On x86-64 with BMI2: uses PDEP fast path.
 // - Otherwise: uses portable byte-table method.
-[[nodiscard]] inline int select_nth_set_bit(uint64_t mask, unsigned n) {
+[[nodiscard]] inline int select_nth_set_bit(uint64_t mask, unsigned n)
+{
 #if defined(__x86_64__) || defined(_M_X64)
-  // Use BMI2 if available on this CPU at runtime.
-  if (cpu_has_bmi2()) {
-    return select_nth_set_bit_bmi2(mask, n);
-  }
-  // else fall through to portable path
+    // Use BMI2 if available on this CPU at runtime.
+    if (cpu_has_bmi2())
+    {
+        return select_nth_set_bit_bmi2(mask, n);
+    }
+    // else fall through to portable path
 #endif
-  return select_nth_set_bit_portable(mask, n);
+    return select_nth_set_bit_portable(mask, n);
 }
 
 } // namespace select64

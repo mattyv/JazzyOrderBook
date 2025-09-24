@@ -594,6 +594,98 @@ SCENARIO("order book best bid/ask optimization", "[orderbook][performance]")
     }
 }
 
+SCENARIO("order book bitmap functionality", "[orderbook][bitmap]")
+{
+    GIVEN("An empty order book")
+    {
+        jazzy::order_book<int, jazzy::tests::order, test_market_stats> book{};
+
+        THEN("All bitmap bits should initially be false")
+        {
+            REQUIRE(book.bid_bitmap().none());
+            REQUIRE(book.ask_bitmap().none());
+        }
+
+        WHEN("Adding bid orders")
+        {
+            book.insert_bid(100, jazzy::tests::order{.order_id = 1, .volume = 10});
+            book.insert_bid(99, jazzy::tests::order{.order_id = 2, .volume = 20});
+            book.insert_bid(98, jazzy::tests::order{.order_id = 3, .volume = 30});
+
+            THEN("Corresponding bitmap bits should be set")
+            {
+                REQUIRE(!book.bid_bitmap().none());
+                REQUIRE(book.ask_bitmap().none());
+
+                // Check specific bits are set (we can't know exact indices without the conversion logic)
+                REQUIRE(book.bid_bitmap().count() == 3);
+            }
+        }
+
+        WHEN("Adding ask orders")
+        {
+            book.insert_ask(110, jazzy::tests::order{.order_id = 1, .volume = 10});
+            book.insert_ask(111, jazzy::tests::order{.order_id = 2, .volume = 20});
+            book.insert_ask(112, jazzy::tests::order{.order_id = 3, .volume = 30});
+
+            THEN("Corresponding ask bitmap bits should be set")
+            {
+                REQUIRE(book.bid_bitmap().none());
+                REQUIRE(!book.ask_bitmap().none());
+
+                REQUIRE(book.ask_bitmap().count() == 3);
+            }
+        }
+    }
+
+    GIVEN("A book with existing orders")
+    {
+        jazzy::order_book<int, jazzy::tests::order, test_market_stats> book{};
+
+        book.insert_bid(100, jazzy::tests::order{.order_id = 1, .volume = 10});
+        book.insert_bid(99, jazzy::tests::order{.order_id = 2, .volume = 20});
+        book.insert_ask(110, jazzy::tests::order{.order_id = 3, .volume = 15});
+
+        WHEN("Updating an order to zero volume at the best bid")
+        {
+            auto initial_bid_count = book.bid_bitmap().count();
+            book.update_bid(100, jazzy::tests::order{.order_id = 1, .volume = 0});
+
+            THEN("The bitmap should reflect the removed level")
+            {
+                REQUIRE(book.bid_bitmap().count() == initial_bid_count - 1);
+                REQUIRE(book.bid_volume_at_tick(100) == 0);
+            }
+        }
+
+        WHEN("Updating an order to zero volume at the best ask")
+        {
+            auto initial_ask_count = book.ask_bitmap().count();
+            book.update_ask(110, jazzy::tests::order{.order_id = 3, .volume = 0});
+
+            THEN("The bitmap should reflect the removed level")
+            {
+                REQUIRE(book.ask_bitmap().count() == initial_ask_count - 1);
+                REQUIRE(book.ask_volume_at_tick(110) == 0);
+            }
+        }
+
+        WHEN("Moving an order to a different price level")
+        {
+            auto initial_bid_count = book.bid_bitmap().count();
+            book.update_bid(101, jazzy::tests::order{.order_id = 1, .volume = 10}); // move from 100 to 101
+
+            THEN("Old level bitmap should be cleared if no volume remains, new level should be set")
+            {
+                REQUIRE(book.bid_volume_at_tick(100) == 0);
+                REQUIRE(book.bid_volume_at_tick(101) == 10);
+                // Total count should remain the same since we moved from one level to another
+                REQUIRE(book.bid_bitmap().count() == initial_bid_count);
+            }
+        }
+    }
+}
+
 SCENARIO("order book market stats sizing", "[orderbook][sizing]")
 {
     GIVEN("Different market statistics configurations")
