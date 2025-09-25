@@ -39,7 +39,8 @@ public:
 
     map_order_book()
     {
-        constexpr size_t estimated_levels = static_cast<size_t>(MarketStats::daily_high_v - MarketStats::daily_low_v);
+        constexpr size_t estimated_levels =
+            static_cast<size_t>(MarketStats::daily_high_v.value() - MarketStats::daily_low_v.value());
         orders_.reserve(estimated_levels * 10); // Arbitrary factor to reduce rehashing
     }
 
@@ -47,7 +48,7 @@ public:
     requires order<U> && std::same_as<order_type, std::decay_t<U>>
     void insert_bid(tick_type tick_value, U&& order)
     {
-        if (tick_value > MarketStats::daily_high_v || tick_value < MarketStats::daily_low_v)
+        if (tick_value > MarketStats::daily_high_v.value() || tick_value < MarketStats::daily_low_v.value())
             return; // Ignore out of range bids
 
         auto [it, succ] = orders_.try_emplace(order_id_getter(order), order);
@@ -65,7 +66,7 @@ public:
     requires order<U> && std::same_as<order_type, std::decay_t<U>>
     void insert_ask(tick_type tick_value, U&& order)
     {
-        if (tick_value > MarketStats::daily_high_v || tick_value < MarketStats::daily_low_v)
+        if (tick_value > MarketStats::daily_high_v.value() || tick_value < MarketStats::daily_low_v.value())
             return; // Ignore out of range asks
 
         auto [it, succ] = orders_.try_emplace(order_id_getter(order), order);
@@ -84,7 +85,7 @@ public:
     void update_bid(tick_type tick_value, U&& order)
     {
         // ignore out of range bids
-        if (tick_value > MarketStats::daily_high_v || tick_value < MarketStats::daily_low_v)
+        if (tick_value > MarketStats::daily_high_v.value() || tick_value < MarketStats::daily_low_v.value())
             return;
 
         auto it = orders_.find(order_id_getter(order));
@@ -142,7 +143,7 @@ public:
     requires order<U> && std::same_as<order_type, std::decay_t<U>>
     void update_ask(tick_type tick_value, U&& order)
     {
-        if (tick_value > MarketStats::daily_high_v || tick_value < MarketStats::daily_low_v)
+        if (tick_value > MarketStats::daily_high_v.value() || tick_value < MarketStats::daily_low_v.value())
             return; // Ignore out of range asks
 
         auto it = orders_.find(order_id_getter(order));
@@ -201,7 +202,7 @@ public:
     void remove_bid(tick_type tick_value, U&& order)
     {
         // Ignore out of range bids
-        if (tick_value > MarketStats::daily_high_v || tick_value < MarketStats::daily_low_v)
+        if (tick_value > MarketStats::daily_high_v.value() || tick_value < MarketStats::daily_low_v.value())
             return;
 
         auto it = orders_.find(order_id_getter(order));
@@ -229,7 +230,7 @@ public:
     void remove_ask(tick_type tick_value, U&& order)
     {
         // Ignore out of range asks
-        if (tick_value > MarketStats::daily_high_v || tick_value < MarketStats::daily_low_v)
+        if (tick_value > MarketStats::daily_high_v.value() || tick_value < MarketStats::daily_low_v.value())
             return;
 
         auto it = orders_.find(order_id_getter(order));
@@ -254,7 +255,7 @@ public:
 
     volume_type bid_volume_at_tick(tick_type tick_value)
     {
-        if (tick_value > MarketStats::daily_high_v || tick_value < MarketStats::daily_low_v)
+        if (tick_value > MarketStats::daily_high_v.value() || tick_value < MarketStats::daily_low_v.value())
             return 0; // Out of range bids have zero volume
 
         auto it = bids_.find(tick_value);
@@ -263,7 +264,7 @@ public:
 
     volume_type ask_volume_at_tick(tick_type tick_value)
     {
-        if (tick_value > MarketStats::daily_high_v || tick_value < MarketStats::daily_low_v)
+        if (tick_value > MarketStats::daily_high_v.value() || tick_value < MarketStats::daily_low_v.value())
             return 0; // Out of range asks have zero volume
 
         auto it = asks_.find(tick_value);
@@ -337,7 +338,7 @@ public:
     [[nodiscard]] size_type size() const noexcept
     {
         // Return the theoretical maximum size based on market range
-        return static_cast<size_t>(MarketStats::daily_high_v - MarketStats::daily_low_v) *
+        return static_cast<size_t>(MarketStats::daily_high_v.value() - MarketStats::daily_low_v.value()) *
             (1.0 + MarketStats::expected_range_v);
     }
 

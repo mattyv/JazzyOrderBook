@@ -30,6 +30,7 @@ class order_book
     };
 
 private:
+
     static constexpr size_t calculate_size(tick_type daily_high, tick_type daily_low, double expected_range)
     {
         return static_cast<size_t>(daily_high - daily_low) * (1.0 + expected_range);
@@ -42,8 +43,9 @@ private:
 public:
     using value_type = OrderType;
     using size_type = size_t;
-    using bitset_type =
-        std::bitset<calculate_size(MarketStats::daily_high_v, MarketStats::daily_low_v, MarketStats::expected_range_v)>;
+    using tick_type_strong = typename MarketStats::tick_type_strong_t;
+    using bitset_type = std::bitset<calculate_size(
+        MarketStats::daily_high_v.value(), MarketStats::daily_low_v.value(), MarketStats::expected_range_v)>;
 
     order_book()
     {
@@ -56,19 +58,22 @@ public:
     requires order<U> && std::same_as<order_type, std::decay_t<U>>
     void insert_bid(tick_type tick_value, U&& order)
     {
-        if (tick_value > MarketStats::daily_high_v || tick_value < MarketStats::daily_low_v)
+        // wrap in strong type to avoid accidental misuse
+        tick_type_strong tick_strong{tick_value};
+        if (tick_strong > MarketStats::daily_high_v || tick_strong < MarketStats::daily_low_v)
             return; // Ignore out of range bids
 
         auto [it, succ] = orders_.try_emplace(order_id_getter(order), order);
 
         assert(succ);
 
-        order_tick_setter(it->second, tick_value);
+        order_tick_setter(it->second, tick_strong.value());
 
-        size_type index = tick_to_index<true>(tick_value);
+        size_type index = tick_to_index<true>(tick_strong);
         bids_[index].volume += order_volume_getter(order);
 
-        best_bid_ = std::max(best_bid_, tick_value);
+        if (!best_bid_.has_value() || tick_strong > best_bid_)
+            best_bid_ = tick_strong;
 
         update_bitsets<true>(true, index);
     }
@@ -77,19 +82,21 @@ public:
     requires order<U> && std::same_as<order_type, std::decay_t<U>>
     void insert_ask(tick_type tick_value, U&& order)
     {
-        if (tick_value > MarketStats::daily_high_v || tick_value < MarketStats::daily_low_v)
+        tick_type_strong tick_strong{tick_value};
+        if (tick_strong > MarketStats::daily_high_v || tick_strong < MarketStats::daily_low_v)
             return; // Ignore out of range asks
 
         auto [it, succ] = orders_.try_emplace(order_id_getter(order), order);
 
         assert(succ);
 
-        order_tick_setter(it->second, tick_value);
+        order_tick_setter(it->second, tick_strong.value());
 
-        size_type index = tick_to_index<false>(tick_value);
+        size_type index = tick_to_index<false>(tick_strong);
         asks_[index].volume += order_volume_getter(order);
 
-        best_ask_ = std::min(best_ask_, tick_value);
+        if (!best_ask_.has_value() || tick_strong < best_ask_)
+            best_ask_ = tick_strong;
 
         update_bitsets<false>(true, index);
     }
@@ -98,24 +105,25 @@ public:
     requires order<U> && std::same_as<order_type, std::decay_t<U>>
     void update_bid(tick_type tick_value, U&& order)
     {
+        tick_type_strong tick_strong{tick_value};
         // ignore out of range bids
-        if (tick_value > MarketStats::daily_high_v || tick_value < MarketStats::daily_low_v)
+        if (tick_strong > MarketStats::daily_high_v || tick_strong < MarketStats::daily_low_v)
             return;
 
         auto it = orders_.find(order_id_getter(order));
         assert(it != orders_.end());
 
-        auto original_tick = order_tick_getter(it->second);
+        auto original_tick = tick_type_strong(order_tick_getter(it->second));
         auto original_volume = order_volume_getter(it->second);
         auto supplied_volume = order_volume_getter(order);
 
         order_volume_setter(it->second, supplied_volume);
-        order_tick_setter(it->second, tick_value);
+        order_tick_setter(it->second, tick_strong.value());
 
-        if (tick_value == original_tick)
+        if (tick_strong == original_tick)
         {
             auto volume_delta = supplied_volume - original_volume;
-            size_type index = tick_to_index<true>(tick_value);
+            size_type index = tick_to_index<true>(tick_strong);
             bids_[index].volume += volume_delta;
 
             // Only scan if we might have removed the best bid
@@ -131,13 +139,13 @@ public:
             size_type old_index = tick_to_index<true>(original_tick);
             bids_[old_index].volume -= original_volume;
 
-            size_type new_index = tick_to_index<true>(tick_value);
+            size_type new_index = tick_to_index<true>(tick_strong);
             bids_[new_index].volume += supplied_volume;
 
             // Update best_bid if needed
-            if (tick_value > best_bid_)
+            if (tick_strong > best_bid_)
             {
-                best_bid_ = tick_value;
+                best_bid_ = tick_strong;
             }
             else if (original_tick == best_bid_ && bids_[old_index].volume == 0)
             {
@@ -152,23 +160,24 @@ public:
     requires order<U> && std::same_as<order_type, std::decay_t<U>>
     void update_ask(tick_type tick_value, U&& order)
     {
-        if (tick_value > MarketStats::daily_high_v || tick_value < MarketStats::daily_low_v)
+        tick_type_strong tick_strong{tick_value};
+        if (tick_strong > MarketStats::daily_high_v || tick_strong < MarketStats::daily_low_v)
             return; // Ignore out of range asks
 
         auto it = orders_.find(order_id_getter(order));
         assert(it != orders_.end());
 
-        auto original_tick = order_tick_getter(it->second);
+        auto original_tick = tick_type_strong(order_tick_getter(it->second));
         auto original_volume = order_volume_getter(it->second);
         auto supplied_volume = order_volume_getter(order);
 
         order_volume_setter(it->second, supplied_volume);
-        order_tick_setter(it->second, tick_value);
+        order_tick_setter(it->second, tick_strong.value());
 
-        if (tick_value == original_tick)
+        if (tick_strong == original_tick)
         {
             auto volume_delta = supplied_volume - original_volume;
-            size_type index = tick_to_index<false>(tick_value);
+            size_type index = tick_to_index<false>(tick_strong);
             asks_[index].volume += volume_delta;
 
             // Only scan if we might have removed the best ask
@@ -184,13 +193,13 @@ public:
             size_type old_index = tick_to_index<false>(original_tick);
             asks_[old_index].volume -= original_volume;
 
-            size_type new_index = tick_to_index<false>(tick_value);
+            size_type new_index = tick_to_index<false>(tick_strong);
             asks_[new_index].volume += supplied_volume;
 
             // Update best_ask if needed
-            if (tick_value < best_ask_)
+            if (tick_strong < best_ask_)
             {
-                best_ask_ = tick_value;
+                best_ask_ = tick_strong;
             }
             else if (original_tick == best_ask_ && asks_[old_index].volume == 0)
             {
@@ -205,8 +214,9 @@ public:
     requires order<U> && std::same_as<order_type, std::decay_t<U>>
     void remove_bid(tick_type tick_value, U&& order)
     {
+        tick_type_strong tick_strong{tick_value};
         // Ignore out of range bids
-        if (tick_value > MarketStats::daily_high_v || tick_value < MarketStats::daily_low_v)
+        if (tick_strong > MarketStats::daily_high_v || tick_strong < MarketStats::daily_low_v)
             return;
 
         auto it = orders_.find(order_id_getter(order));
@@ -216,7 +226,7 @@ public:
         assert(it != orders_.end());
         orders_.erase(it);
 
-        size_type index = tick_to_index<true>(tick_value);
+        size_type index = tick_to_index<true>(tick_strong);
         bids_[index].volume -= original_volume;
     }
 
@@ -224,8 +234,9 @@ public:
     requires order<U> && std::same_as<order_type, std::decay_t<U>>
     void remove_ask(tick_type tick_value, U&& order)
     {
+        tick_type_strong tick_strong{tick_value};
         // Ignore out of range asks
-        if (tick_value > MarketStats::daily_high_v || tick_value < MarketStats::daily_low_v)
+        if (tick_strong > MarketStats::daily_high_v || tick_strong < MarketStats::daily_low_v)
             return;
 
         auto it = orders_.find(order_id_getter(order));
@@ -235,25 +246,27 @@ public:
         assert(it != orders_.end());
         orders_.erase(it);
 
-        size_type index = tick_to_index<false>(tick_value);
+        size_type index = tick_to_index<false>(tick_strong);
         asks_[index].volume -= original_volume;
     }
 
     volume_type bid_volume_at_tick(tick_type tick_value)
     {
-        if (tick_value > MarketStats::daily_high_v || tick_value < MarketStats::daily_low_v)
+        tick_type_strong tick_strong{tick_value};
+        if (tick_strong > MarketStats::daily_high_v || tick_strong < MarketStats::daily_low_v)
             return 0; // Out of range bids have zero volume
 
-        size_type index = tick_to_index<true>(tick_value);
+        size_type index = tick_to_index<true>(tick_strong);
         return bids_[index].volume;
     }
 
     volume_type ask_volume_at_tick(tick_type tick_value)
     {
-        if (tick_value > MarketStats::daily_high_v || tick_value < MarketStats::daily_low_v)
+        tick_type_strong tick_strong{tick_value};
+        if (tick_strong > MarketStats::daily_high_v || tick_strong < MarketStats::daily_low_v)
             return 0; // Out of range asks have zero volume
 
-        size_type index = tick_to_index<false>(tick_value);
+        size_type index = tick_to_index<false>(tick_strong);
         return asks_[index].volume;
     }
 
@@ -264,7 +277,7 @@ public:
         // scanning from best bid to low
         // so level 0 is the highest bid
         // level 1 is the next highest bid, etc
-        if (best_bid_ == NO_BID_VALUE)
+        if (!best_bid_.has_value())
         {
             // No bids exist, return empty order
             order_type dummy_order{};
@@ -281,7 +294,7 @@ public:
                 {
                     order_type dummy_order{};
                     order_volume_setter(dummy_order, bids_[i].volume);
-                    order_tick_setter(dummy_order, index_to_tick<true>(i));
+                    order_tick_setter(dummy_order, index_to_tick<true>(i).value());
                     return dummy_order;
                 }
                 --level;
@@ -302,7 +315,7 @@ public:
         // scanning from best ask to high
         // so level 0 is the lowest ask
         // level 1 is the next lowest ask, etc
-        if (best_ask_ == NO_ASK_VALUE)
+        if (!best_ask_.has_value())
         {
             // No asks exist, return empty order
             order_type dummy_order{};
@@ -319,7 +332,7 @@ public:
                 {
                     order_type dummy_order{};
                     order_volume_setter(dummy_order, asks_[i].volume);
-                    order_tick_setter(dummy_order, index_to_tick<false>(i));
+                    order_tick_setter(dummy_order, index_to_tick<false>(i).value());
                     return dummy_order;
                 }
                 --level;
@@ -335,20 +348,26 @@ public:
     [[nodiscard]] size_type constexpr low() const noexcept { return 0; }
     [[nodiscard]] size_type constexpr high() const noexcept { return size_ - 1; }
 
-    [[nodiscard]] tick_type best_bid() const noexcept { return best_bid_; }
-    [[nodiscard]] tick_type best_ask() const noexcept { return best_ask_; }
+    [[nodiscard]] tick_type best_bid() const noexcept
+    {
+        return best_bid_.has_value() ? best_bid_.value() : NO_BID_VALUE;
+    }
+    [[nodiscard]] tick_type best_ask() const noexcept
+    {
+        return best_ask_.has_value() ? best_ask_.value() : NO_ASK_VALUE;
+    }
 
     [[nodiscard]] const bitset_type& bid_bitmap() const noexcept { return bid_bitmap_; }
     [[nodiscard]] const bitset_type& ask_bitmap() const noexcept { return ask_bitmap_; }
 
 private:
     template <bool is_bid>
-    constexpr size_type tick_to_index(tick_type tick_value) const
+    constexpr size_type tick_to_index(const tick_type_strong& tick_value) const
     {
         if constexpr (is_bid)
         {
-            auto high_val = static_cast<unsigned long>(MarketStats::daily_high_v);
-            auto tick_val = static_cast<unsigned long>(tick_value);
+            auto high_val = static_cast<unsigned long>(MarketStats::daily_high_v.value());
+            auto tick_val = static_cast<unsigned long>(tick_value.value());
             assert(tick_val <= high_val && "Tick value above daily high for bids");
             size_type offset = high_val - tick_val;
             assert(offset < size_ && "Tick value out of range for bids");
@@ -356,28 +375,30 @@ private:
         }
         else
         {
-            size_type index = static_cast<unsigned long>(tick_value) -
-                static_cast<unsigned long>(MarketStats::daily_low_v); // Start from low end for asks
+            size_type index = static_cast<unsigned long>(tick_value.value()) -
+                static_cast<unsigned long>(MarketStats::daily_low_v.value()); // Start from low end for asks
             assert(index >= 0 && index < size_ && "Tick value out of range for asks");
             return index;
         }
     }
 
     template <bool is_bid>
-    constexpr tick_type index_to_tick(size_type index) const
+    constexpr tick_type_strong index_to_tick(size_type index) const
     {
         assert(index < size_ && "Index out of range");
         if constexpr (is_bid)
         {
-            return static_cast<tick_type>(MarketStats::daily_high_v - static_cast<base_type>((size_ - 1) - index));
+            return tick_type_strong{static_cast<tick_type>(
+                MarketStats::daily_high_v.value() - static_cast<base_type>((size_ - 1) - index))};
         }
         else
         {
-            return static_cast<tick_type>(MarketStats::daily_low_v + static_cast<base_type>(index));
+            return tick_type_strong{
+                static_cast<tick_type>(MarketStats::daily_low_v.value() + static_cast<base_type>(index))};
         }
     }
 
-    tick_type scan_for_best_bid(size_type start_index) const
+    tick_type_strong scan_for_best_bid(size_type start_index) const
     {
         for (size_type i = start_index;; --i)
         {
@@ -386,17 +407,17 @@ private:
             if (i == 0)
                 break;
         }
-        return NO_BID_VALUE;
+        return tick_type_strong::no_value();
     }
 
-    tick_type scan_for_best_ask(size_type start_index) const
+    tick_type_strong scan_for_best_ask(size_type start_index) const
     {
         for (size_type i = start_index; i < size_; ++i)
         {
             if (asks_[i].volume != 0)
                 return index_to_tick<false>(i);
         }
-        return NO_ASK_VALUE;
+        return tick_type_strong::no_value();
     }
 
     template <bool is_bid>
@@ -412,10 +433,10 @@ private:
         }
     }
 
-    static constexpr size_type size_ =
-        calculate_size(MarketStats::daily_high_v, MarketStats::daily_low_v, MarketStats::expected_range_v);
-    tick_type best_bid_{NO_BID_VALUE};
-    tick_type best_ask_{NO_ASK_VALUE};
+    static constexpr size_type size_ = calculate_size(
+        MarketStats::daily_high_v.value(), MarketStats::daily_low_v.value(), MarketStats::expected_range_v);
+    tick_type_strong best_bid_ = tick_type_strong::no_value();
+    tick_type_strong best_ask_ = tick_type_strong::no_value();
     bid_storage bids_;
     bitset_type bid_bitmap_{};
     ask_storage asks_;
