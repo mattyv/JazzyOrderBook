@@ -428,7 +428,7 @@ static void BM_JazzyOrderBook_GetOrderAtLevel(benchmark::State& state)
     for (auto _ : state)
     {
         // Access orders at different levels
-        const int max_levels = std::min(static_cast<int>(state.range(0) / 4), 50);
+        const int max_levels = std::min(20, 50); // Conservative estimate of actual levels
         for (int level = 0; level < max_levels; ++level)
         {
             auto bid_order = book.bid_at_level(level);
@@ -454,7 +454,7 @@ static void BM_MapOrderBook_GetOrderAtLevel(benchmark::State& state)
     for (auto _ : state)
     {
         // Access orders at different levels
-        const int max_levels = std::min(static_cast<int>(state.range(0) / 4), 50);
+        const int max_levels = std::min(20, 50); // Conservative estimate of actual levels
         for (int level = 0; level < max_levels; ++level)
         {
             auto bid_order = book.bid_at_level(level);
