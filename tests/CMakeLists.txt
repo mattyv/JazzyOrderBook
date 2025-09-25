@@ -1,5 +1,5 @@
 project(tests)
-add_executable(${PROJECT_NAME} main.cpp orderbook_tests.cpp select_nth_test.cpp out_of_range_tests.cpp)
+add_executable(${PROJECT_NAME} main.cpp orderbook_tests.cpp select_nth_test.cpp out_of_range_tests.cpp tick_type_strong_tests.cpp best_price_regression_tests.cpp)
 
 target_link_libraries(${PROJECT_NAME} PRIVATE jazzy)
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_23)

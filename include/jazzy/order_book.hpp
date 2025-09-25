@@ -248,7 +248,7 @@ public:
         if (bids_[index].volume == 0)
         {
             update_bitsets<true>(false, index);
-            if (best_bid_.has_value() && tick_type_strong(order_tick_getter(order)) == best_bid_)
+            if (best_bid_.has_value() && tick_strong == best_bid_)
             {
                 best_bid_ = scan_for_best_bid(index == 0 ? size_t(0) : index - 1);
             }
@@ -279,7 +279,7 @@ public:
         if (asks_[index].volume == 0)
         {
             update_bitsets<false>(false, index);
-            if (best_ask_.has_value() && tick_type_strong(order_tick_getter(order)) == best_ask_)
+            if (best_ask_.has_value() && tick_strong == best_ask_)
             {
                 best_ask_ = scan_for_best_ask(index + 1 < size_ ? index + 1 : size_ - 1);
             }
