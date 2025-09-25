@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cassert>
+#include <cmath>
 #include <jazzy/traits.hpp>
 #include <jazzy/types.hpp>
 
@@ -33,7 +34,18 @@ private:
 
     static constexpr size_t calculate_size(tick_type daily_high, tick_type daily_low, double expected_range)
     {
-        return static_cast<size_t>(daily_high - daily_low) * (1.0 + expected_range);
+        // sanity check: protect against inverted range
+        if (daily_high < daily_low)
+        {
+            return 0; // or throw/assert depending on design
+        }
+
+        auto diff = static_cast<double>(daily_high - daily_low);
+        auto scaled = diff * (1.0 + expected_range);
+
+        size_t scaled_size = static_cast<size_t>(scaled);
+        assert(scaled_size > 0 && "Order book size must be positive for valid bitsets");
+        return scaled_size;
     }
 
     using bid_storage = std::vector<level>;
@@ -63,14 +75,15 @@ public:
         if (tick_strong > MarketStats::daily_high_v || tick_strong < MarketStats::daily_low_v)
             return; // Ignore out of range bids
 
-        auto [it, succ] = orders_.try_emplace(order_id_getter(order), order);
+        auto volume = order_volume_getter(order);
+        auto [it, succ] = orders_.try_emplace(order_id_getter(order), std::forward<U>(order));
 
         assert(succ);
 
         order_tick_setter(it->second, tick_strong.value());
 
         size_type index = tick_to_index<true>(tick_strong);
-        bids_[index].volume += order_volume_getter(order);
+        bids_[index].volume += volume;
 
         if (!best_bid_.has_value() || tick_strong > best_bid_)
             best_bid_ = tick_strong;
@@ -86,14 +99,15 @@ public:
         if (tick_strong > MarketStats::daily_high_v || tick_strong < MarketStats::daily_low_v)
             return; // Ignore out of range asks
 
-        auto [it, succ] = orders_.try_emplace(order_id_getter(order), order);
+        auto volume = order_volume_getter(order);
+        auto [it, succ] = orders_.try_emplace(order_id_getter(order), std::forward<U>(order));
 
         assert(succ);
 
         order_tick_setter(it->second, tick_strong.value());
 
         size_type index = tick_to_index<false>(tick_strong);
-        asks_[index].volume += order_volume_getter(order);
+        asks_[index].volume += volume;
 
         if (!best_ask_.has_value() || tick_strong < best_ask_)
             best_ask_ = tick_strong;
@@ -220,6 +234,7 @@ public:
             return;
 
         auto it = orders_.find(order_id_getter(order));
+        assert(it != orders_.end());
 
         auto original_volume = order_volume_getter(it->second);
 
@@ -228,6 +243,16 @@ public:
 
         size_type index = tick_to_index<true>(tick_strong);
         bids_[index].volume -= original_volume;
+
+        // update best_bid_ if needed
+        if (bids_[index].volume == 0)
+        {
+            update_bitsets<true>(false, index);
+            if (best_bid_.has_value() && tick_type_strong(order_tick_getter(order)) == best_bid_)
+            {
+                best_bid_ = scan_for_best_bid(index == 0 ? size_t(0) : index - 1);
+            }
+        }
     }
 
     template <typename U>
@@ -240,6 +265,7 @@ public:
             return;
 
         auto it = orders_.find(order_id_getter(order));
+        assert(it != orders_.end());
 
         auto original_volume = order_volume_getter(it->second);
 
@@ -248,6 +274,16 @@ public:
 
         size_type index = tick_to_index<false>(tick_strong);
         asks_[index].volume -= original_volume;
+
+        // update best_ask_ if needed
+        if (asks_[index].volume == 0)
+        {
+            update_bitsets<false>(false, index);
+            if (best_ask_.has_value() && tick_type_strong(order_tick_getter(order)) == best_ask_)
+            {
+                best_ask_ = scan_for_best_ask(index + 1 < size_ ? index + 1 : size_ - 1);
+            }
+        }
     }
 
     volume_type bid_volume_at_tick(tick_type tick_value)
