@@ -132,7 +132,7 @@ public:
         auto volume = order_volume_getter(order);
         auto [it, succ] = orders_.try_emplace(order_id_getter(order), std::forward<U>(order));
 
-        assert(succ);
+        assert(succ && "Order ID already exists");
 
         order_tick_setter(it->second, tick_strong.value());
 
@@ -156,7 +156,7 @@ public:
         auto volume = order_volume_getter(order);
         auto [it, succ] = orders_.try_emplace(order_id_getter(order), std::forward<U>(order));
 
-        assert(succ);
+        assert(succ && "Order ID already exists");
 
         order_tick_setter(it->second, tick_strong.value());
 
@@ -193,22 +193,24 @@ public:
             auto volume_delta = supplied_volume - original_volume;
             size_type index = tick_to_index(tick_strong);
             bids_[index].volume += volume_delta;
+            const bool has_volume = bids_[index].volume != 0;
+            update_bitsets<true>(has_volume, index);
 
             // Only scan if we might have removed the best bid
-            if (volume_delta < 0 && original_tick == best_bid_ && bids_[index].volume == 0)
+            if (volume_delta < 0 && original_tick == best_bid_ && !has_volume)
             {
                 best_bid_ = scan_for_best_bid(index);
-
-                update_bitsets<true>(false, index);
             }
         }
         else
         {
             size_type old_index = tick_to_index(original_tick);
             bids_[old_index].volume -= original_volume;
+            update_bitsets<true>(bids_[old_index].volume != 0, old_index);
 
             size_type new_index = tick_to_index(tick_strong);
             bids_[new_index].volume += supplied_volume;
+            update_bitsets<true>(bids_[new_index].volume != 0, new_index);
 
             // Update best_bid if needed
             if (tick_strong > best_bid_)
@@ -218,8 +220,6 @@ public:
             else if (original_tick == best_bid_ && bids_[old_index].volume == 0)
             {
                 best_bid_ = scan_for_best_bid(old_index);
-
-                update_bitsets<true>(false, old_index);
             }
         }
     }
@@ -247,22 +247,24 @@ public:
             auto volume_delta = supplied_volume - original_volume;
             size_type index = tick_to_index(tick_strong);
             asks_[index].volume += volume_delta;
+            const bool has_volume = asks_[index].volume != 0;
+            update_bitsets<false>(has_volume, index);
 
             // Only scan if we might have removed the best ask
-            if (volume_delta < 0 && original_tick == best_ask_ && asks_[index].volume == 0)
+            if (volume_delta < 0 && original_tick == best_ask_ && !has_volume)
             {
                 best_ask_ = scan_for_best_ask(index);
-
-                update_bitsets<false>(false, index);
             }
         }
         else
         {
             size_type old_index = tick_to_index(original_tick);
             asks_[old_index].volume -= original_volume;
+            update_bitsets<false>(asks_[old_index].volume != 0, old_index);
 
             size_type new_index = tick_to_index(tick_strong);
             asks_[new_index].volume += supplied_volume;
+            update_bitsets<false>(asks_[new_index].volume != 0, new_index);
 
             // Update best_ask if needed
             if (tick_strong < best_ask_)
@@ -272,8 +274,6 @@ public:
             else if (original_tick == best_ask_ && asks_[old_index].volume == 0)
             {
                 best_ask_ = scan_for_best_ask(old_index);
-
-                update_bitsets<false>(false, old_index);
             }
         }
     }
