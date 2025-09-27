@@ -44,4 +44,4 @@
 
 build/*
 .cache/*
-benchmark_results/*
+benchmark_results/*_new.txt
