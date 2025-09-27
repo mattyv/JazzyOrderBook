@@ -55,6 +55,20 @@ public:
 
     constexpr bool operator!=(const tick_type_strong& rhs) const noexcept { return !(*this == rhs); }
 
+    constexpr tick_type_strong operator+(const tick_type_strong& rhs) const noexcept
+    {
+        if (!has_value_ || !rhs.has_value_)
+            return no_value();
+        return tick_type_strong{v_ + rhs.v_};
+    }
+
+    constexpr tick_type_strong operator-(const tick_type_strong& rhs) const noexcept
+    {
+        if (!has_value_ || !rhs.has_value_)
+            return no_value();
+        return tick_type_strong{v_ - rhs.v_};
+    }
+
     // explicit converstion to size_type
     explicit constexpr operator std::size_t() const noexcept { return static_cast<std::size_t>(v_); }
 private:

@@ -2,11 +2,13 @@
 
 #include <cassert>
 #include <cmath>
+#include <cstdint>
 #include <jazzy/traits.hpp>
 #include <jazzy/types.hpp>
 
 #include <bitset>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace jazzy {
@@ -30,22 +32,77 @@ class order_book
         volume_type volume{};
     };
 
-private:
+public:
+    using value_type = OrderType;
+    using size_type = size_t;
 
-    static constexpr size_t calculate_size(tick_type daily_high, tick_type daily_low, double expected_range)
+private:
+    using tick_type_strong = typename MarketStats::tick_type_strong_t;
+
+    static constexpr size_type calculate_size(
+        const tick_type_strong& daily_high, const tick_type_strong& daily_low, double expected_range)
     {
         // sanity check: protect against inverted range
-        if (daily_high < daily_low)
+        assert(daily_high > daily_low && "Daily high must be greater than daily low");
+        assert(expected_range >= 0.0 && "Expected range must be non-negative");
+
+        const auto base_span = static_cast<double>((daily_high - daily_low).value());
+        const auto scaled_span = static_cast<size_type>(base_span * (1.0 + expected_range));
+        const auto inclusive_span = static_cast<size_type>((daily_high - daily_low).value()) + 1;
+        const size_type total_span = scaled_span < inclusive_span ? inclusive_span : scaled_span;
+        assert(total_span > 0 && "Order book size must be positive for valid bitsets");
+        return total_span;
+    }
+
+    static constexpr std::pair<std::int64_t, std::int64_t> calculate_bounds(
+        const tick_type_strong& daily_high,
+        const tick_type_strong& daily_low,
+        const tick_type_strong& close,
+        double expected_range)
+    {
+        const auto span = static_cast<std::int64_t>(calculate_size(daily_high, daily_low, expected_range));
+        const auto base_low = static_cast<std::int64_t>(daily_low.value());
+        const auto base_high = static_cast<std::int64_t>(daily_high.value());
+        const auto center = static_cast<std::int64_t>(close.value());
+
+        std::int64_t lower = center - (span / 2);
+        std::int64_t upper = lower + span - 1;
+
+        if (upper < base_high)
         {
-            return 0; // or throw/assert depending on design
+            const auto shift = base_high - upper;
+            lower += shift;
+            upper += shift;
         }
 
-        auto diff = static_cast<double>(daily_high - daily_low);
-        auto scaled = diff * (1.0 + expected_range);
+        if (lower > base_low)
+        {
+            const auto shift = lower - base_low;
+            lower -= shift;
+            upper -= shift;
+        }
 
-        size_t scaled_size = static_cast<size_t>(scaled);
-        assert(scaled_size > 0 && "Order book size must be positive for valid bitsets");
-        return scaled_size;
+        return {lower, upper};
+    }
+
+    static constexpr tick_type_strong calculate_lower_bound(
+        const tick_type_strong& daily_high,
+        const tick_type_strong& daily_low,
+        const tick_type_strong& close,
+        double expected_range)
+    {
+        const auto bounds = calculate_bounds(daily_high, daily_low, close, expected_range);
+        return tick_type_strong{static_cast<TickType>(bounds.first)};
+    }
+
+    static constexpr tick_type_strong calculate_upper_bound(
+        const tick_type_strong& daily_high,
+        const tick_type_strong& daily_low,
+        const tick_type_strong& close,
+        double expected_range)
+    {
+        const auto bounds = calculate_bounds(daily_high, daily_low, close, expected_range);
+        return tick_type_strong{static_cast<TickType>(bounds.second)};
     }
 
     using bid_storage = std::vector<level>;
@@ -53,11 +110,8 @@ private:
     using order_storage = std::unordered_map<id_type, order_type>;
 
 public:
-    using value_type = OrderType;
-    using size_type = size_t;
-    using tick_type_strong = typename MarketStats::tick_type_strong_t;
-    using bitset_type = std::bitset<calculate_size(
-        MarketStats::daily_high_v.value(), MarketStats::daily_low_v.value(), MarketStats::expected_range_v)>;
+    using bitset_type =
+        std::bitset<calculate_size(MarketStats::daily_high_v, MarketStats::daily_low_v, MarketStats::expected_range_v)>;
 
     order_book()
     {
@@ -82,7 +136,7 @@ public:
 
         order_tick_setter(it->second, tick_strong.value());
 
-        size_type index = tick_to_index<true>(tick_strong);
+        size_type index = tick_to_index(tick_strong);
         bids_[index].volume += volume;
 
         if (!best_bid_.has_value() || tick_strong > best_bid_)
@@ -106,7 +160,7 @@ public:
 
         order_tick_setter(it->second, tick_strong.value());
 
-        size_type index = tick_to_index<false>(tick_strong);
+        size_type index = tick_to_index(tick_strong);
         asks_[index].volume += volume;
 
         if (!best_ask_.has_value() || tick_strong < best_ask_)
@@ -137,7 +191,7 @@ public:
         if (tick_strong == original_tick)
         {
             auto volume_delta = supplied_volume - original_volume;
-            size_type index = tick_to_index<true>(tick_strong);
+            size_type index = tick_to_index(tick_strong);
             bids_[index].volume += volume_delta;
 
             // Only scan if we might have removed the best bid
@@ -150,10 +204,10 @@ public:
         }
         else
         {
-            size_type old_index = tick_to_index<true>(original_tick);
+            size_type old_index = tick_to_index(original_tick);
             bids_[old_index].volume -= original_volume;
 
-            size_type new_index = tick_to_index<true>(tick_strong);
+            size_type new_index = tick_to_index(tick_strong);
             bids_[new_index].volume += supplied_volume;
 
             // Update best_bid if needed
@@ -191,7 +245,7 @@ public:
         if (tick_strong == original_tick)
         {
             auto volume_delta = supplied_volume - original_volume;
-            size_type index = tick_to_index<false>(tick_strong);
+            size_type index = tick_to_index(tick_strong);
             asks_[index].volume += volume_delta;
 
             // Only scan if we might have removed the best ask
@@ -204,10 +258,10 @@ public:
         }
         else
         {
-            size_type old_index = tick_to_index<false>(original_tick);
+            size_type old_index = tick_to_index(original_tick);
             asks_[old_index].volume -= original_volume;
 
-            size_type new_index = tick_to_index<false>(tick_strong);
+            size_type new_index = tick_to_index(tick_strong);
             asks_[new_index].volume += supplied_volume;
 
             // Update best_ask if needed
@@ -241,16 +295,16 @@ public:
         assert(it != orders_.end());
         orders_.erase(it);
 
-        size_type index = tick_to_index<true>(tick_strong);
+        size_type index = tick_to_index(tick_strong);
         bids_[index].volume -= original_volume;
 
         // update best_bid_ if needed
         if (bids_[index].volume == 0)
         {
             update_bitsets<true>(false, index);
-            if (best_bid_.has_value() && tick_type_strong(order_tick_getter(order)) == best_bid_)
+            if (best_bid_.has_value() && tick_strong == best_bid_)
             {
-                best_bid_ = scan_for_best_bid(index == 0 ? size_t(0) : index - 1);
+                best_bid_ = scan_for_best_bid(index == 0 ? size_type{0} : index - 1);
             }
         }
     }
@@ -272,14 +326,14 @@ public:
         assert(it != orders_.end());
         orders_.erase(it);
 
-        size_type index = tick_to_index<false>(tick_strong);
+        size_type index = tick_to_index(tick_strong);
         asks_[index].volume -= original_volume;
 
         // update best_ask_ if needed
         if (asks_[index].volume == 0)
         {
             update_bitsets<false>(false, index);
-            if (best_ask_.has_value() && tick_type_strong(order_tick_getter(order)) == best_ask_)
+            if (best_ask_.has_value() && tick_strong == best_ask_)
             {
                 best_ask_ = scan_for_best_ask(index + 1 < size_ ? index + 1 : size_ - 1);
             }
@@ -292,7 +346,7 @@ public:
         if (tick_strong > MarketStats::daily_high_v || tick_strong < MarketStats::daily_low_v)
             return 0; // Out of range bids have zero volume
 
-        size_type index = tick_to_index<true>(tick_strong);
+        size_type index = tick_to_index(tick_strong);
         return bids_[index].volume;
     }
 
@@ -302,7 +356,7 @@ public:
         if (tick_strong > MarketStats::daily_high_v || tick_strong < MarketStats::daily_low_v)
             return 0; // Out of range asks have zero volume
 
-        size_type index = tick_to_index<false>(tick_strong);
+        size_type index = tick_to_index(tick_strong);
         return asks_[index].volume;
     }
 
@@ -322,7 +376,7 @@ public:
             return dummy_order;
         }
 
-        for (size_type i = tick_to_index<true>(best_bid_);; --i)
+        for (size_type i = tick_to_index(best_bid_);; --i)
         {
             if (bids_[i].volume != 0)
             {
@@ -330,7 +384,7 @@ public:
                 {
                     order_type dummy_order{};
                     order_volume_setter(dummy_order, bids_[i].volume);
-                    order_tick_setter(dummy_order, index_to_tick<true>(i).value());
+                    order_tick_setter(dummy_order, index_to_tick(i).value());
                     return dummy_order;
                 }
                 --level;
@@ -360,7 +414,7 @@ public:
             return dummy_order;
         }
 
-        for (size_type i = tick_to_index<false>(best_ask_); i < size_; ++i)
+        for (size_type i = tick_to_index(best_ask_); i < size_; ++i)
         {
             if (asks_[i].volume != 0)
             {
@@ -368,7 +422,7 @@ public:
                 {
                     order_type dummy_order{};
                     order_volume_setter(dummy_order, asks_[i].volume);
-                    order_tick_setter(dummy_order, index_to_tick<false>(i).value());
+                    order_tick_setter(dummy_order, index_to_tick(i).value());
                     return dummy_order;
                 }
                 --level;
@@ -396,42 +450,20 @@ public:
     [[nodiscard]] const bitset_type& bid_bitmap() const noexcept { return bid_bitmap_; }
     [[nodiscard]] const bitset_type& ask_bitmap() const noexcept { return ask_bitmap_; }
 
-private:
-    template <bool is_bid>
     constexpr size_type tick_to_index(const tick_type_strong& tick_value) const
     {
-        if constexpr (is_bid)
-        {
-            auto high_val = static_cast<unsigned long>(MarketStats::daily_high_v.value());
-            auto tick_val = static_cast<unsigned long>(tick_value.value());
-            assert(tick_val <= high_val && "Tick value above daily high for bids");
-            size_type offset = high_val - tick_val;
-            assert(offset < size_ && "Tick value out of range for bids");
-            return (size_ - 1) - offset; // Start from high end for bids
-        }
-        else
-        {
-            size_type index = static_cast<unsigned long>(tick_value.value()) -
-                static_cast<unsigned long>(MarketStats::daily_low_v.value()); // Start from low end for asks
-            assert(index >= 0 && index < size_ && "Tick value out of range for asks");
-            return index;
-        }
+        const auto tick_val = static_cast<std::int64_t>(tick_value.value());
+        const auto low_val = static_cast<std::int64_t>(range_low_v_.value());
+        assert(tick_value <= range_high_v_ && tick_value >= range_low_v_ && "Tick value out of range for price level");
+        const auto offset = tick_val - low_val;
+        assert(offset >= 0 && static_cast<size_type>(offset) < size_ && "Tick value out of range for price level");
+        return static_cast<size_type>(offset);
     }
 
-    template <bool is_bid>
     constexpr tick_type_strong index_to_tick(size_type index) const
     {
         assert(index < size_ && "Index out of range");
-        if constexpr (is_bid)
-        {
-            return tick_type_strong{static_cast<tick_type>(
-                MarketStats::daily_high_v.value() - static_cast<base_type>((size_ - 1) - index))};
-        }
-        else
-        {
-            return tick_type_strong{
-                static_cast<tick_type>(MarketStats::daily_low_v.value() + static_cast<base_type>(index))};
-        }
+        return tick_type_strong{static_cast<tick_type>(range_low_v_.value() + static_cast<base_type>(index))};
     }
 
     tick_type_strong scan_for_best_bid(size_type start_index) const
@@ -439,7 +471,7 @@ private:
         for (size_type i = start_index;; --i)
         {
             if (bids_[i].volume != 0)
-                return index_to_tick<true>(i);
+                return index_to_tick(i);
             if (i == 0)
                 break;
         }
@@ -451,7 +483,7 @@ private:
         for (size_type i = start_index; i < size_; ++i)
         {
             if (asks_[i].volume != 0)
-                return index_to_tick<false>(i);
+                return index_to_tick(i);
         }
         return tick_type_strong::no_value();
     }
@@ -469,8 +501,12 @@ private:
         }
     }
 
-    static constexpr size_type size_ = calculate_size(
-        MarketStats::daily_high_v.value(), MarketStats::daily_low_v.value(), MarketStats::expected_range_v);
+    static constexpr size_type size_ =
+        calculate_size(MarketStats::daily_high_v, MarketStats::daily_low_v, MarketStats::expected_range_v);
+    static constexpr tick_type_strong range_low_v_ = calculate_lower_bound(
+        MarketStats::daily_high_v, MarketStats::daily_low_v, MarketStats::daily_close_v, MarketStats::expected_range_v);
+    static constexpr tick_type_strong range_high_v_ = calculate_upper_bound(
+        MarketStats::daily_high_v, MarketStats::daily_low_v, MarketStats::daily_close_v, MarketStats::expected_range_v);
     tick_type_strong best_bid_ = tick_type_strong::no_value();
     tick_type_strong best_ask_ = tick_type_strong::no_value();
     bid_storage bids_;
