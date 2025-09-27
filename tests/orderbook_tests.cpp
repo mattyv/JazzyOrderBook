@@ -848,6 +848,12 @@ SCENARIO("order book best bid/ask optimization", "[orderbook][performance]")
         WHEN("Moving an order to a better price")
         {
             auto test_move_ask_to_better_price = []<typename BookType>(BookType& book) {
+                std::size_t initial_ask_count = 0;
+                if constexpr (requires(const BookType& b) { b.ask_bitmap(); })
+                {
+                    initial_ask_count = book.ask_bitmap().count();
+                }
+
                 book.update_ask(99, jazzy::tests::order{.order_id = 2, .volume = 20}); // move from 101 to 99
 
                 THEN("Best ask should update immediately")
@@ -857,6 +863,18 @@ SCENARIO("order book best bid/ask optimization", "[orderbook][performance]")
                     REQUIRE(book.ask_at_level(2).volume == 30); // 102 remains
                     REQUIRE(book.ask_volume_at_tick(99) == 20);
                     REQUIRE(book.ask_volume_at_tick(101) == 0);
+                    if constexpr (requires(const BookType& b) { b.ask_bitmap(); })
+                    {
+                        REQUIRE(book.ask_bitmap().count() == initial_ask_count);
+                    }
+
+                    book.update_ask(99, jazzy::tests::order{.order_id = 2, .volume = 0});
+
+                    REQUIRE(book.ask_volume_at_tick(99) == 0);
+                    if constexpr (requires(const BookType& b) { b.ask_bitmap(); })
+                    {
+                        REQUIRE(book.ask_bitmap().count() == initial_ask_count - 1);
+                    }
                 }
             };
 
@@ -957,6 +975,11 @@ SCENARIO("order book bitmap functionality", "[orderbook][bitmap]")
                 REQUIRE(book.bid_volume_at_tick(101) == 10);
                 // Total count should remain the same since we moved from one level to another
                 REQUIRE(book.bid_bitmap().count() == initial_bid_count);
+
+                book.update_bid(101, jazzy::tests::order{.order_id = 1, .volume = 0});
+
+                REQUIRE(book.bid_volume_at_tick(101) == 0);
+                REQUIRE(book.bid_bitmap().count() == initial_bid_count - 1);
             }
         }
     }
