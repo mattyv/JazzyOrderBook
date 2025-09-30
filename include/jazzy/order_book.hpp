@@ -6,10 +6,11 @@
 #include <jazzy/traits.hpp>
 #include <jazzy/types.hpp>
 
-#include <bitset>
 #include <unordered_map>
 #include <utility>
 #include <vector>
+
+#include <jazzy/detail/level_bitmap.hpp>
 
 namespace jazzy {
 
@@ -110,8 +111,8 @@ private:
     using order_storage = std::unordered_map<id_type, order_type>;
 
 public:
-    using bitset_type =
-        std::bitset<calculate_size(MarketStats::daily_high_v, MarketStats::daily_low_v, MarketStats::expected_range_v)>;
+    using bitset_type = detail::level_bitmap<calculate_size(
+        MarketStats::daily_high_v, MarketStats::daily_low_v, MarketStats::expected_range_v)>;
 
     order_book()
     {
@@ -199,7 +200,7 @@ public:
             // Only scan if we might have removed the best bid
             if (volume_delta < 0 && original_tick == best_bid_ && !has_volume)
             {
-                best_bid_ = scan_for_best_bid(index);
+                best_bid_ = scan_for_best_bid();
             }
         }
         else
@@ -219,7 +220,7 @@ public:
             }
             else if (original_tick == best_bid_ && bids_[old_index].volume == 0)
             {
-                best_bid_ = scan_for_best_bid(old_index);
+                best_bid_ = scan_for_best_bid();
             }
         }
     }
@@ -253,7 +254,7 @@ public:
             // Only scan if we might have removed the best ask
             if (volume_delta < 0 && original_tick == best_ask_ && !has_volume)
             {
-                best_ask_ = scan_for_best_ask(index);
+                best_ask_ = scan_for_best_ask();
             }
         }
         else
@@ -273,7 +274,7 @@ public:
             }
             else if (original_tick == best_ask_ && asks_[old_index].volume == 0)
             {
-                best_ask_ = scan_for_best_ask(old_index);
+                best_ask_ = scan_for_best_ask();
             }
         }
     }
@@ -304,7 +305,7 @@ public:
             update_bitsets<true>(false, index);
             if (best_bid_.has_value() && tick_strong == best_bid_)
             {
-                best_bid_ = scan_for_best_bid(index == 0 ? size_type{0} : index - 1);
+                best_bid_ = scan_for_best_bid();
             }
         }
     }
@@ -335,7 +336,7 @@ public:
             update_bitsets<false>(false, index);
             if (best_ask_.has_value() && tick_strong == best_ask_)
             {
-                best_ask_ = scan_for_best_ask(index + 1 < size_ ? index + 1 : size_ - 1);
+                best_ask_ = scan_for_best_ask();
             }
         }
     }
@@ -375,27 +376,21 @@ public:
             order_tick_setter(dummy_order, tick_type{});
             return dummy_order;
         }
-
-        for (size_type i = tick_to_index(best_bid_);; --i)
+        const size_type total_levels = static_cast<size_type>(bid_bitmap_.count());
+        if (level >= total_levels)
         {
-            if (bids_[i].volume != 0)
-            {
-                if (level == 0)
-                {
-                    order_type dummy_order{};
-                    order_volume_setter(dummy_order, bids_[i].volume);
-                    order_tick_setter(dummy_order, index_to_tick(i).value());
-                    return dummy_order;
-                }
-                --level;
-            }
-            if (i == 0)
-                break;
+            order_type dummy_order{};
+            order_volume_setter(dummy_order, 0);
+            order_tick_setter(dummy_order, tick_type{});
+            return dummy_order;
         }
-        order_type dummy_order{};
-        order_volume_setter(dummy_order, 0);
-        order_tick_setter(dummy_order, tick_type{});
-        return dummy_order;
+
+        const size_t index = bid_bitmap_.select_from_high(static_cast<size_t>(level));
+
+        order_type order_at_level{};
+        order_volume_setter(order_at_level, bids_[index].volume);
+        order_tick_setter(order_at_level, index_to_tick(index).value());
+        return order_at_level;
     }
 
     [[nodiscard]] order_type ask_at_level(size_type level) const
@@ -414,24 +409,21 @@ public:
             return dummy_order;
         }
 
-        for (size_type i = tick_to_index(best_ask_); i < size_; ++i)
+        const size_type total_levels = static_cast<size_type>(ask_bitmap_.count());
+        if (level >= total_levels)
         {
-            if (asks_[i].volume != 0)
-            {
-                if (level == 0)
-                {
-                    order_type dummy_order{};
-                    order_volume_setter(dummy_order, asks_[i].volume);
-                    order_tick_setter(dummy_order, index_to_tick(i).value());
-                    return dummy_order;
-                }
-                --level;
-            }
+            order_type dummy_order{};
+            order_volume_setter(dummy_order, 0);
+            order_tick_setter(dummy_order, tick_type{});
+            return dummy_order;
         }
-        order_type dummy_order{};
-        order_volume_setter(dummy_order, 0);
-        order_tick_setter(dummy_order, tick_type{});
-        return dummy_order;
+
+        const size_t index = ask_bitmap_.select_from_low(static_cast<size_t>(level));
+
+        order_type order_at_level{};
+        order_volume_setter(order_at_level, asks_[index].volume);
+        order_tick_setter(order_at_level, index_to_tick(index).value());
+        return order_at_level;
     }
 
     [[nodiscard]] size_type constexpr size() const noexcept { return size_; }
@@ -466,26 +458,20 @@ public:
         return tick_type_strong{static_cast<tick_type>(range_low_v_.value() + static_cast<base_type>(index))};
     }
 
-    tick_type_strong scan_for_best_bid(size_type start_index) const
+    tick_type_strong scan_for_best_bid() const
     {
-        for (size_type i = start_index;; --i)
-        {
-            if (bids_[i].volume != 0)
-                return index_to_tick(i);
-            if (i == 0)
-                break;
-        }
-        return tick_type_strong::no_value();
+        const int index = bid_bitmap_.find_highest();
+        if (index < 0)
+            return tick_type_strong::no_value();
+        return index_to_tick(static_cast<size_type>(index));
     }
 
-    tick_type_strong scan_for_best_ask(size_type start_index) const
+    tick_type_strong scan_for_best_ask() const
     {
-        for (size_type i = start_index; i < size_; ++i)
-        {
-            if (asks_[i].volume != 0)
-                return index_to_tick(i);
-        }
-        return tick_type_strong::no_value();
+        const int index = ask_bitmap_.find_lowest();
+        if (index < 0)
+            return tick_type_strong::no_value();
+        return index_to_tick(static_cast<size_type>(index));
     }
 
     template <bool is_bid>

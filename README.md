@@ -108,8 +108,9 @@ current best run.
 - `tests/` – Catch2 regression and property tests together with the sample
   `tests/order.hpp` adapter.
 - `benchmarks/` – Google Benchmark harness and the map-based baseline book.
-- `utils/select_nth.hpp` – branch-friendly selection helper used inside the
+- `include/jazzy/detail/select_nth.hpp` – branch-friendly selection helper used inside the
   order book.
+- `include/jazzy/detail/level_bitmap.hpp` – compact bitmap wrapper enabling fast level scans.
 - `scripts/` – helper scripts for benchmarks and local tooling.
 - `benchmark_results/` – archived benchmark runs (keyed by detected hardware).
 
