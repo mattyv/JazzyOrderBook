@@ -45,3 +45,9 @@
 build/*
 .cache/*
 benchmark_results/*_new.txt
+
+# IDE configuration
+.vscode/
+
+# CTest output
+Testing/

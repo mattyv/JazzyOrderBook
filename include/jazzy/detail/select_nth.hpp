@@ -29,13 +29,14 @@
 #include <bit>
 #include <bitset>
 #include <cstdint>
-#include <iostream>
 #include <stdexcept>
 
 #if defined(__x86_64__) || defined(_M_X64)
 #include <immintrin.h> // _pdep_u64, TZCNT intrinsics (when compiled with support)
 #if defined(__GNUC__) || defined(__clang__)
 #include <cpuid.h> // __get_cpuid_count
+#elif defined(_MSC_VER)
+#include <intrin.h> // __cpuidex
 #endif
 #endif
 
@@ -129,6 +130,11 @@ inline bool cpu_has_bmi2()
     if (!__get_cpuid_count(7, 0, &eax, &ebx, &ecx, &edx))
         return false;
     return (ebx & (1u << 8)) != 0;
+#elif defined(_MSC_VER)
+    int info[4] = {0, 0, 0, 0};
+    __cpuidex(info, 7, 0);
+    // info[1] contains EBX.
+    return (info[1] & (1 << 8)) != 0;
 #else
     // On other toolchains, skip CPUID; fallback path will be used.
     return false;
@@ -176,59 +182,51 @@ select_nth_set_bit_bmi2(uint64_t mask, unsigned n)
 
 // Template function for finding nth set bit in std::bitset
 template <size_t N>
-[[nodiscard]] inline int select_nth_set_bit(const std::bitset<N>& bitset, unsigned n)
+[[nodiscard]] inline size_t select_nth_set_bit_unchecked(const std::bitset<N>& bitset, size_t n)
 {
-    const unsigned total = static_cast<unsigned>(bitset.count());
-    if (n >= total)
+#if HAS_FIND_NEXT
+    // libstdc++ implementation with _Find_next()
+    size_t current_pos = bitset._Find_first();
+    for (size_t count = 0; count < n; ++count)
+    {
+        current_pos = bitset._Find_next(current_pos);
+    }
+    if (current_pos >= N)
     {
         throw std::out_of_range("n out of range");
     }
-
-#if HAS_FIND_NEXT
-    // libstdc++ implementation with _Find_next()
-    std::cout << "Using _Find_next() optimization\n";
-    size_t current_pos = 0;
-    for (unsigned count = 0; count <= n; ++count)
-    {
-        if (count == 0)
-        {
-            // Find first set bit
-            current_pos = bitset._Find_first();
-        }
-        else
-        {
-            // Find next set bit after current_pos
-            current_pos = bitset._Find_next(current_pos);
-        }
-
-        if (current_pos >= N)
-        {
-            throw std::out_of_range("n out of range");
-        }
-
-        if (count == n)
-        {
-            return static_cast<int>(current_pos);
-        }
-    }
+    return current_pos;
 #else
     // Portable fallback implementation
-    std::cout << "Using portable bitset scan\n";
-    unsigned count = 0;
+    size_t count = 0;
     for (size_t i = 0; i < N; ++i)
     {
         if (bitset[i])
         {
             if (count == n)
             {
-                return static_cast<int>(i);
+                return i;
             }
             ++count;
         }
     }
 #endif
-
     throw std::logic_error("Internal error: should not reach here");
+}
+
+// Template function for finding nth set bit in std::bitset with bounds check.
+// This overload retains the original API and uses the unchecked helper after
+// validating that 'n' is within the number of set bits.
+template <size_t N>
+[[nodiscard]] inline size_t select_nth_set_bit(const std::bitset<N>& bitset, size_t n)
+{
+    const size_t total = bitset.count();
+    if (n >= total)
+    {
+        throw std::out_of_range("n out of range");
+    }
+
+    return select_nth_set_bit_unchecked(bitset, n);
 }
 
 // ---------- Public API: pick best available path ----------

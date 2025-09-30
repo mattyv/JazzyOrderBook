@@ -1,7 +1,7 @@
-#include "../utils/select_nth.hpp"
 #include "catch.hpp"
 #include <array>
 #include <bit>
+#include <jazzy/detail/select_nth.hpp>
 #include <jazzy/order_book.hpp>
 #include <vector>
 
