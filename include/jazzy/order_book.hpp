@@ -6,6 +6,7 @@
 #include <jazzy/traits.hpp>
 #include <jazzy/types.hpp>
 
+#include <memory>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -14,9 +15,10 @@
 
 namespace jazzy {
 
-template <typename TickType, typename OrderType, typename MarketStats>
+template <typename TickType, typename OrderType, typename MarketStats, typename Allocator = std::allocator<OrderType>>
 requires tick<TickType> && order<OrderType> && market_stats<MarketStats> &&
-    std::same_as<typename MarketStats::tick_type, TickType>
+    std::same_as<typename MarketStats::tick_type, TickType> &&
+    std::same_as<typename std::allocator_traits<Allocator>::value_type, OrderType>
 class order_book
 {
     using order_type = OrderType;
@@ -36,9 +38,14 @@ class order_book
 public:
     using value_type = OrderType;
     using size_type = size_t;
+    using allocator_type = Allocator;
 
 private:
     using tick_type_strong = typename MarketStats::tick_type_strong_t;
+    using allocator_traits = std::allocator_traits<allocator_type>;
+    using order_map_value_type = std::pair<const id_type, order_type>;
+    using level_allocator_type = typename allocator_traits::template rebind_alloc<level>;
+    using order_storage_allocator_type = typename allocator_traits::template rebind_alloc<order_map_value_type>;
 
     static constexpr size_type calculate_size(
         const tick_type_strong& daily_high, const tick_type_strong& daily_low, double expected_range)
@@ -106,15 +113,24 @@ private:
         return tick_type_strong{static_cast<TickType>(bounds.second)};
     }
 
-    using bid_storage = std::vector<level>;
-    using ask_storage = std::vector<level>;
-    using order_storage = std::unordered_map<id_type, order_type>;
+    using bid_storage = std::vector<level, level_allocator_type>;
+    using ask_storage = std::vector<level, level_allocator_type>;
+    using order_storage = std::
+        unordered_map<id_type, order_type, std::hash<id_type>, std::equal_to<id_type>, order_storage_allocator_type>;
 
 public:
     using bitset_type = detail::level_bitmap<calculate_size(
         MarketStats::daily_high_v, MarketStats::daily_low_v, MarketStats::expected_range_v)>;
 
     order_book()
+        : order_book(allocator_type{})
+    {}
+
+    explicit order_book(const allocator_type& allocator)
+        : bids_(level_allocator_type(allocator))
+        , asks_(level_allocator_type(allocator))
+        , orders_(order_storage_allocator_type(allocator))
+        , allocator_(allocator)
     {
         bids_.resize(size_);
         asks_.resize(size_);
@@ -341,6 +357,16 @@ public:
         }
     }
 
+    order_type get_order(id_type id) const
+    {
+        auto it = orders_.find(id);
+        if (it != orders_.end())
+        {
+            return it->second;
+        }
+        throw std::out_of_range("Order ID not found");
+    }
+
     volume_type bid_volume_at_tick(tick_type tick_value)
     {
         tick_type_strong tick_strong{tick_value};
@@ -442,6 +468,8 @@ public:
     [[nodiscard]] const bitset_type& bid_bitmap() const noexcept { return bid_bitmap_; }
     [[nodiscard]] const bitset_type& ask_bitmap() const noexcept { return ask_bitmap_; }
 
+    [[nodiscard]] allocator_type get_allocator() const noexcept { return allocator_; }
+
     constexpr size_type tick_to_index(const tick_type_strong& tick_value) const
     {
         const auto tick_val = static_cast<std::int64_t>(tick_value.value());
@@ -493,13 +521,20 @@ public:
         MarketStats::daily_high_v, MarketStats::daily_low_v, MarketStats::daily_close_v, MarketStats::expected_range_v);
     static constexpr tick_type_strong range_high_v_ = calculate_upper_bound(
         MarketStats::daily_high_v, MarketStats::daily_low_v, MarketStats::daily_close_v, MarketStats::expected_range_v);
+
+    // Hot path data: these get hammered on every order operation, so keep them together
+    // for better cache locality. best_bid/ask are checked constantly, and the bitmaps
+    // are used for efficient level scanning
     tick_type_strong best_bid_ = tick_type_strong::no_value();
     tick_type_strong best_ask_ = tick_type_strong::no_value();
-    bid_storage bids_;
     bitset_type bid_bitmap_{};
-    ask_storage asks_;
     bitset_type ask_bitmap_{};
+
+    // Bulkier storage goes here - these are less frequently accessed as whole containers
+    bid_storage bids_;
+    ask_storage asks_;
     order_storage orders_;
+    allocator_type allocator_{};
 };
 
 } // namespace jazzy
