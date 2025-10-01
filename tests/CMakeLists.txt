@@ -16,11 +16,14 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
 )
 
-# Additional strict warnings for tests
+# Additional strict warnings for tests (treat warnings as errors)
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
     target_compile_options(${PROJECT_NAME} PRIVATE
+        -Werror
         -Wconversion -Wsign-conversion -Wcast-align -Wformat=2
     )
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+    target_compile_options(${PROJECT_NAME} PRIVATE /WX)
 endif()
 
 add_test(NAME unit_tests COMMAND ${PROJECT_NAME})

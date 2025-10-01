@@ -32,7 +32,6 @@ constexpr int BIT_0 = 0;
 constexpr int BIT_1 = 1;
 constexpr int BIT_2 = 2;
 constexpr int BIT_3 = 3;
-constexpr int BIT_7 = 7;
 constexpr int BIT_62 = 62;
 constexpr int BIT_63 = 63;
 
@@ -174,9 +173,9 @@ SCENARIO("Finding bits in a full byte pattern", "[select_nth]")
         {
             THEN("Each nth bit should be at position n")
             {
-                for (int n = 0; n < 8; ++n)
+                for (unsigned int n = 0; n < 8; ++n)
                 {
-                    REQUIRE(select_nth_set_bit(mask, n) == n);
+                    REQUIRE(select_nth_set_bit(mask, n) == static_cast<int>(n));
                 }
             }
         }
@@ -209,9 +208,9 @@ SCENARIO("Finding bits in edge case patterns", "[select_nth]")
         {
             THEN("Each nth bit should be at position n")
             {
-                for (int n = 0; n < 64; ++n)
+                for (unsigned int n = 0; n < 64; ++n)
                 {
-                    REQUIRE(select_nth_set_bit(mask, n) == n);
+                    REQUIRE(select_nth_set_bit(mask, n) == static_cast<int>(n));
                 }
             }
         }
@@ -262,9 +261,9 @@ SCENARIO("Finding bits in sparse patterns", "[select_nth]")
         {
             THEN("Each nth bit should be at position 2n+1")
             {
-                for (int n = 0; n < expected_set_bits; ++n)
+                for (unsigned int n = 0; n < expected_set_bits; ++n)
                 {
-                    REQUIRE(select_nth_set_bit(mask, n) == n * 2 + 1);
+                    REQUIRE(select_nth_set_bit(mask, n) == static_cast<int>(n * 2 + 1));
                 }
             }
         }
@@ -279,9 +278,9 @@ SCENARIO("Finding bits in sparse patterns", "[select_nth]")
         {
             THEN("Each nth bit should be at position 4n")
             {
-                for (int n = 0; n < expected_set_bits; ++n)
+                for (unsigned int n = 0; n < expected_set_bits; ++n)
                 {
-                    REQUIRE(select_nth_set_bit(mask, n) == n * 4);
+                    REQUIRE(select_nth_set_bit(mask, n) == static_cast<int>(n * 4));
                 }
             }
         }
@@ -297,9 +296,9 @@ SCENARIO("Finding bits in sparse patterns", "[select_nth]")
         {
             THEN("Each nth bit should be at position 8n")
             {
-                for (int n = 0; n < expected_set_bits; ++n)
+                for (unsigned int n = 0; n < expected_set_bits; ++n)
                 {
-                    REQUIRE(select_nth_set_bit(mask, n) == n * bits_per_byte);
+                    REQUIRE(select_nth_set_bit(mask, n) == static_cast<int>(n * bits_per_byte));
                 }
             }
         }
@@ -413,8 +412,8 @@ SCENARIO("Consistency between portable and BMI2 implementations", "[select_nth]"
             {
                 for (auto mask : test_patterns)
                 {
-                    int popcount = std::popcount(mask);
-                    for (int n = 0; n < popcount; ++n)
+                    unsigned int popcount = static_cast<unsigned int>(std::popcount(mask));
+                    for (unsigned int n = 0; n < popcount; ++n)
                     {
                         int portable_result = select_nth_set_bit_portable(mask, n);
                         int api_result = select_nth_set_bit(mask, n);
@@ -460,7 +459,7 @@ SCENARIO("Verification against manual bit scanning", "[select_nth]")
                     // Verify select_nth_set_bit matches our manual scan
                     for (size_t n = 0; n < expected_positions.size(); ++n)
                     {
-                        REQUIRE(select_nth_set_bit(mask, n) == expected_positions[n]);
+                        REQUIRE(select_nth_set_bit(mask, static_cast<unsigned int>(n)) == expected_positions[n]);
                     }
                 }
             }

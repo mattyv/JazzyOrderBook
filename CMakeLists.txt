@@ -21,7 +21,8 @@ target_compile_features(${PROJECT_NAME} INTERFACE cxx_std_23)
 # Compiler warnings for the interface library
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
     target_compile_options(${PROJECT_NAME} INTERFACE
-        -Wall -Wextra -Wpedantic -Woverflow -Wshift-overflow=2
+        -Wall -Wextra -Wpedantic -Woverflow
+        $<$<CXX_COMPILER_ID:GNU>:-Wshift-overflow=2>
     )
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
     target_compile_options(${PROJECT_NAME} INTERFACE

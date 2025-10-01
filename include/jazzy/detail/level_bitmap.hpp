@@ -109,10 +109,10 @@ inline constexpr std::size_t bits_per_block = 64;
     unsigned int remaining = rank;
     while (remaining--)
     {
-        const auto msb = 63 - __builtin_clzll(word);
+        const auto msb = 63U - static_cast<unsigned int>(__builtin_clzll(word));
         word &= ~(1ULL << msb);
     }
-    return 63 - __builtin_clzll(word);
+    return 63U - static_cast<unsigned int>(__builtin_clzll(word));
 #else
     // Portable branchless implementation
     // Constants for the branchless select algorithm

@@ -9,11 +9,14 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>
 )
 
-# Warnings for benchmarks (but not as strict to avoid benchmark library warnings)
+# Warnings for benchmarks (treat warnings as errors)
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
     target_compile_options(${PROJECT_NAME} PRIVATE
+        -Werror
         -Wconversion -Wsign-conversion
     )
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+    target_compile_options(${PROJECT_NAME} PRIVATE /WX)
 endif()
 
 # Add BMI2 support for x86-64 platforms
@@ -35,11 +38,14 @@ target_include_directories(${PROJECT_NAME}_portable PRIVATE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>
 )
 
-# Warnings for portable benchmarks
+# Warnings for portable benchmarks (treat warnings as errors)
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
     target_compile_options(${PROJECT_NAME}_portable PRIVATE
+        -Werror
         -Wconversion -Wsign-conversion
     )
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+    target_compile_options(${PROJECT_NAME}_portable PRIVATE /WX)
 endif()
 
 target_compile_definitions(${PROJECT_NAME}_portable PRIVATE
