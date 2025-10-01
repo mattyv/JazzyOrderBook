@@ -91,7 +91,9 @@ inline constexpr std::size_t bits_per_block = 64;
                                       62, 55, 59, 36, 53, 51, 43, 22, 45, 39, 33, 30, 24, 18, 12, 5,
                                       63, 47, 56, 27, 60, 41, 37, 16, 54, 35, 52, 21, 44, 32, 23, 11,
                                       46, 26, 40, 15, 34, 20, 31, 10, 25, 14, 19, 9,  13, 8,  7,  6};
-    return table[((value & -value) * debruijn) >> 58];
+    // Isolate lowest set bit: value & -value can trigger MSVC warning C4146
+    // Use two's complement equivalent: value & (~value + 1)
+    return table[((value & (~value + 1)) * debruijn) >> 58];
 #endif
 }
 
