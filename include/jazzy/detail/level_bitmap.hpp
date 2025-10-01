@@ -38,14 +38,41 @@ namespace level_bitmap_detail {
 
 inline constexpr std::size_t bits_per_block = 64;
 
+// Generate SWAR (SIMD Within A Register) bit masks by repeating a pattern
+// For example: repeat_byte_pattern(0x01) = 0x0101010101010101
+//              repeat_byte_pattern(0x33) = 0x3333333333333333
+[[nodiscard]] constexpr std::uint64_t repeat_byte_pattern(std::uint8_t pattern) noexcept
+{
+    std::uint64_t result = pattern;
+    result |= result << 8;
+    result |= result << 16;
+    result |= result << 32;
+    return result;
+}
+
+// Generate alternating masks with 16-bit pattern
+// For example: repeat_word_pattern(0x00ff) = 0x00ff00ff00ff00ff
+[[nodiscard]] constexpr std::uint64_t repeat_word_pattern(std::uint16_t pattern) noexcept
+{
+    std::uint64_t result = pattern;
+    result |= result << 16;
+    result |= result << 32;
+    return result;
+}
+
 [[nodiscard]] inline constexpr std::size_t popcount(std::uint64_t value) noexcept
 {
 #if JAZZY_HAS_BUILTIN_POPCOUNT
     return static_cast<std::size_t>(__builtin_popcountll(value));
 #else
-    value = value - ((value >> 1) & 0x5555555555555555ULL);
-    value = (value & 0x3333333333333333ULL) + ((value >> 2) & 0x3333333333333333ULL);
-    value = (value + (value >> 4)) & 0x0f0f0f0f0f0f0f0fULL;
+    // SWAR (SIMD Within A Register) parallel bit counting
+    constexpr auto mask_01 = repeat_byte_pattern(0x55); // 0101 pattern
+    constexpr auto mask_00_11 = repeat_byte_pattern(0x33); // 0011 pattern
+    constexpr auto mask_nibble = repeat_byte_pattern(0x0f); // 00001111 pattern
+
+    value = value - ((value >> 1) & mask_01);
+    value = (value & mask_00_11) + ((value >> 2) & mask_00_11);
+    value = (value + (value >> 4)) & mask_nibble;
     value = value + (value >> 8);
     value = value + (value >> 16);
     value = value + (value >> 32);
@@ -68,43 +95,81 @@ inline constexpr std::size_t bits_per_block = 64;
 #endif
 }
 
-[[nodiscard]] inline constexpr int msb_index(std::uint64_t value) noexcept
+// Select the bit position (from MSB) with the given rank
+// Based on: https://graphics.stanford.edu/~seander/bithacks.html
+// rank is 0-indexed (0 = highest bit, 1 = second highest, etc.)
+[[nodiscard]] inline constexpr unsigned int select_bit_from_msb(std::uint64_t value, unsigned int rank) noexcept
 {
-    assert(value != 0);
-#if JAZZY_HAS_BUILTIN_CLZ
-    return 63 - __builtin_clzll(value);
+    assert(rank < popcount(value) && "rank must be less than popcount");
+
+#if JAZZY_HAS_BUILTIN_CLZ && JAZZY_HAS_BUILTIN_POPCOUNT
+    // Use fast builtin path when available
+    std::uint64_t word = value;
+    unsigned int remaining = rank;
+    while (remaining--)
+    {
+        const auto msb = 63 - __builtin_clzll(word);
+        word &= ~(1ULL << msb);
+    }
+    return 63 - __builtin_clzll(word);
 #else
-    int index = 0;
-    if (value >= (1ULL << 32))
-    {
-        value >>= 32;
-        index += 32;
-    }
-    if (value >= (1ULL << 16))
-    {
-        value >>= 16;
-        index += 16;
-    }
-    if (value >= (1ULL << 8))
-    {
-        value >>= 8;
-        index += 8;
-    }
-    if (value >= (1ULL << 4))
-    {
-        value >>= 4;
-        index += 4;
-    }
-    if (value >= (1ULL << 2))
-    {
-        value >>= 2;
-        index += 2;
-    }
-    if (value >= (1ULL << 1))
-    {
-        index += 1;
-    }
-    return index;
+    // Portable branchless implementation
+    // Constants for the branchless select algorithm
+    constexpr unsigned int SIGN_BIT_MASK = 256; // 0x100, used to detect negative subtraction
+    constexpr unsigned int BITS_PER_UINT64 = 64;
+
+    unsigned int rank_one_indexed = rank + 1; // Algorithm uses 1-indexed rank
+
+    // Parallel bit count for 64-bit integer (SWAR technique)
+    constexpr auto mask_01 = repeat_byte_pattern(0x55); // 0101 pattern
+    constexpr auto mask_00_11 = repeat_byte_pattern(0x33); // 0011 pattern
+    constexpr auto mask_nibble = repeat_byte_pattern(0x0f); // 00001111 pattern
+    constexpr auto mask_byte = repeat_word_pattern(0x00ff); // alternating bytes
+
+    std::uint64_t a = value - ((value >> 1) & mask_01);
+    std::uint64_t b = (a & mask_00_11) + ((a >> 2) & mask_00_11);
+    std::uint64_t c = (b + (b >> 4)) & mask_nibble;
+    std::uint64_t d = (c + (c >> 8)) & mask_byte;
+    unsigned int bit_count = static_cast<unsigned int>((d >> 32) + (d >> 48));
+
+    // Branchless binary search to find the bit position
+    // Each step narrows down the position by half using bit counts
+    unsigned int position = BITS_PER_UINT64;
+
+    // Check upper 32 bits
+    position -= ((bit_count - rank_one_indexed) & SIGN_BIT_MASK) >> 3;
+    rank_one_indexed -= (bit_count & ((bit_count - rank_one_indexed) >> 8));
+
+    // Check 16-bit chunks
+    bit_count = static_cast<unsigned int>((d >> (position - 16)) & 0xff);
+    position -= ((bit_count - rank_one_indexed) & SIGN_BIT_MASK) >> 4;
+    rank_one_indexed -= (bit_count & ((bit_count - rank_one_indexed) >> 8));
+
+    // Check 8-bit chunks
+    bit_count = static_cast<unsigned int>((c >> (position - 8)) & 0xf);
+    position -= ((bit_count - rank_one_indexed) & SIGN_BIT_MASK) >> 5;
+    rank_one_indexed -= (bit_count & ((bit_count - rank_one_indexed) >> 8));
+
+    // Check 4-bit chunks
+    bit_count = static_cast<unsigned int>((b >> (position - 4)) & 0x7);
+    position -= ((bit_count - rank_one_indexed) & SIGN_BIT_MASK) >> 6;
+    rank_one_indexed -= (bit_count & ((bit_count - rank_one_indexed) >> 8));
+
+    // Check 2-bit chunks
+    bit_count = static_cast<unsigned int>((a >> (position - 2)) & 0x3);
+    position -= ((bit_count - rank_one_indexed) & SIGN_BIT_MASK) >> 7;
+    rank_one_indexed -= (bit_count & ((bit_count - rank_one_indexed) >> 8));
+
+    // Check final bit
+    bit_count = static_cast<unsigned int>((value >> (position - 1)) & 0x1);
+    position -= ((bit_count - rank_one_indexed) & SIGN_BIT_MASK) >> 8;
+
+    // Convert from position counting from right to 1-indexed
+    position = 65 - position;
+
+    // Algorithm returns 1-indexed position from MSB (1=bit 63, 64=bit 0)
+    // Convert to bit index: bit_index = 64 - position
+    return BITS_PER_UINT64 - position;
 #endif
 }
 
@@ -180,7 +245,8 @@ public:
             if (word != 0)
             {
                 return static_cast<int>(
-                    block * bits_per_block + static_cast<std::size_t>(level_bitmap_detail::msb_index(word)));
+                    block * bits_per_block +
+                    static_cast<std::size_t>(level_bitmap_detail::select_bit_from_msb(word, 0)));
             }
         }
         return -1;
@@ -228,13 +294,8 @@ public:
             const std::size_t block_pop = level_bitmap_detail::popcount(word);
             if (remaining < block_pop)
             {
-                while (remaining--)
-                {
-                    const auto msb = level_bitmap_detail::msb_index(word);
-                    word &= ~(1ull << msb);
-                }
-                assert(word != 0);
-                const auto bit_offset = static_cast<std::size_t>(level_bitmap_detail::msb_index(word));
+                const auto bit_offset =
+                    level_bitmap_detail::select_bit_from_msb(word, static_cast<unsigned int>(remaining));
                 return block * bits_per_block + bit_offset;
             }
             remaining -= block_pop;
@@ -316,7 +377,7 @@ public:
         {
             return -1;
         }
-        return level_bitmap_detail::msb_index(bits_);
+        return static_cast<int>(level_bitmap_detail::select_bit_from_msb(bits_, 0));
     }
 
     [[nodiscard]] std::size_t select_from_low(std::size_t rank) const
@@ -343,16 +404,8 @@ public:
             throw std::out_of_range("rank out of range");
         }
 
-        std::uint64_t word = bits_;
-        std::size_t remaining = rank;
-        while (remaining--)
-        {
-            assert(word != 0);
-            const auto msb = static_cast<std::size_t>(level_bitmap_detail::msb_index(word));
-            word &= ~(1ull << msb);
-        }
-        assert(word != 0);
-        return static_cast<std::size_t>(level_bitmap_detail::msb_index(word));
+        return static_cast<std::size_t>(
+            level_bitmap_detail::select_bit_from_msb(bits_, static_cast<unsigned int>(rank)));
     }
 
 private:

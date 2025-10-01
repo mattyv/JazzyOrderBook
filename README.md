@@ -96,6 +96,14 @@ cmake --build build --target benchmarks
 ./build/benchmarks/benchmarks
 ```
 
+To force the portable `level_bitmap` implementation (all compiler builtins
+disabled) build and run the dedicated target:
+
+```bash
+cmake --build build --target benchmarks_portable
+./build/benchmarks/benchmarks_portable
+```
+
 Sample outputs are stored under `benchmark_results/`. The helper script
 `scripts/benchmark_compare.sh` runs the benchmark, captures the result keyed by
 your CPU (using `scripts/detect_hardware.sh`), and lets you diff against the
