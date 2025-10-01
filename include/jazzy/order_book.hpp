@@ -341,6 +341,16 @@ public:
         }
     }
 
+    order_type get_order(id_type id) const
+    {
+        auto it = orders_.find(id);
+        if (it != orders_.end())
+        {
+            return it->second;
+        }
+        throw std::out_of_range("Order ID not found");
+    }
+
     volume_type bid_volume_at_tick(tick_type tick_value)
     {
         tick_type_strong tick_strong{tick_value};
