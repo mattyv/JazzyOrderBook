@@ -206,10 +206,9 @@ public:
             return;
 
         auto it = orders_.find(order_id_getter(order));
+        assert(it != orders_.end());
 
         auto original_volume = order_volume_getter(it->second);
-
-        assert(it != orders_.end());
         orders_.erase(it);
 
         bids_[tick_value].volume -= original_volume;
@@ -234,10 +233,9 @@ public:
             return;
 
         auto it = orders_.find(order_id_getter(order));
+        assert(it != orders_.end());
 
         auto original_volume = order_volume_getter(it->second);
-
-        assert(it != orders_.end());
         orders_.erase(it);
 
         asks_[tick_value].volume -= original_volume;
