@@ -97,6 +97,7 @@ inline constexpr std::size_t bits_per_block = 64;
 
 // Select the bit position (from MSB) with the given rank
 // Based on: https://graphics.stanford.edu/~seander/bithacks.html
+// Section: "Select the bit position (from the most-significant bit) with the given count (rank)"
 // rank is 0-indexed (0 = highest bit, 1 = second highest, etc.)
 [[nodiscard]] inline constexpr unsigned int select_bit_from_msb(std::uint64_t value, unsigned int rank) noexcept
 {

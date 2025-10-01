@@ -16,6 +16,13 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
 )
 
+# Additional strict warnings for tests
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
+    target_compile_options(${PROJECT_NAME} PRIVATE
+        -Wconversion -Wsign-conversion -Wcast-align -Wformat=2
+    )
+endif()
+
 add_test(NAME unit_tests COMMAND ${PROJECT_NAME})
 
 # Add BMI2 support for x86-64 platforms

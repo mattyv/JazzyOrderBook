@@ -9,6 +9,13 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>
 )
 
+# Warnings for benchmarks (but not as strict to avoid benchmark library warnings)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
+    target_compile_options(${PROJECT_NAME} PRIVATE
+        -Wconversion -Wsign-conversion
+    )
+endif()
+
 # Add BMI2 support for x86-64 platforms
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
     target_compile_options(${PROJECT_NAME} PRIVATE
@@ -27,6 +34,13 @@ target_include_directories(${PROJECT_NAME}_portable PRIVATE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>
 )
+
+# Warnings for portable benchmarks
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
+    target_compile_options(${PROJECT_NAME}_portable PRIVATE
+        -Wconversion -Wsign-conversion
+    )
+endif()
 
 target_compile_definitions(${PROJECT_NAME}_portable PRIVATE
     JAZZY_HAS_BUILTIN_POPCOUNT=0
