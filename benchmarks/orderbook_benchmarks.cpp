@@ -146,25 +146,25 @@ static void BM_JazzyOrderBook_MixedOps(benchmark::State& state)
         VectorOrderBook book{};
         std::vector<jazzy::tests::order> active_orders;
 
-        const int num_ops = state.range(0);
+        const std::int64_t num_ops = state.range(0);
         std::uniform_int_distribution<int> op_dist(0, 2); // 0=add, 1=update, 2=remove
 
-        for (int i = 0; i < num_ops; ++i)
+        for (std::int64_t i = 0; i < num_ops; ++i)
         {
             int op = op_dist(gen);
 
             if (op == 0 || active_orders.empty())
             {
                 // Add operation
-                auto order = generate_random_order(i);
+                auto order = generate_random_order(static_cast<int>(i));
                 active_orders.push_back(order);
                 add_random_order(book, order);
             }
             else if (op == 1 && !active_orders.empty())
             {
                 // Update operation - change volume
-                std::uniform_int_distribution<int> idx_dist(0, active_orders.size() - 1);
-                int idx = idx_dist(gen);
+                std::uniform_int_distribution<size_t> idx_dist(0, active_orders.size() - 1);
+                size_t idx = idx_dist(gen);
                 auto& order = active_orders[idx];
 
                 std::uniform_int_distribution<int> new_volume_dist(1, 500);
@@ -183,8 +183,8 @@ static void BM_JazzyOrderBook_MixedOps(benchmark::State& state)
             else if (op == 2 && !active_orders.empty())
             {
                 // Remove operation
-                std::uniform_int_distribution<int> idx_dist(0, active_orders.size() - 1);
-                int idx = idx_dist(gen);
+                std::uniform_int_distribution<size_t> idx_dist(0, active_orders.size() - 1);
+                size_t idx = idx_dist(gen);
                 auto order = active_orders[idx];
 
                 std::uniform_int_distribution<int> side_dist(0, 1);
@@ -197,7 +197,7 @@ static void BM_JazzyOrderBook_MixedOps(benchmark::State& state)
                     book.remove_ask(order.tick, order);
                 }
 
-                active_orders.erase(active_orders.begin() + idx);
+                active_orders.erase(active_orders.begin() + static_cast<std::ptrdiff_t>(idx));
             }
         }
 
@@ -213,25 +213,25 @@ static void BM_MapOrderBook_MixedOps(benchmark::State& state)
         MapOrderBook book{};
         std::vector<jazzy::tests::order> active_orders;
 
-        const int num_ops = state.range(0);
+        const std::int64_t num_ops = state.range(0);
         std::uniform_int_distribution<int> op_dist(0, 2); // 0=add, 1=update, 2=remove
 
-        for (int i = 0; i < num_ops; ++i)
+        for (std::int64_t i = 0; i < num_ops; ++i)
         {
             int op = op_dist(gen);
 
             if (op == 0 || active_orders.empty())
             {
                 // Add operation
-                auto order = generate_random_order(i);
+                auto order = generate_random_order(static_cast<int>(i));
                 active_orders.push_back(order);
                 add_random_order(book, order);
             }
             else if (op == 1 && !active_orders.empty())
             {
                 // Update operation - change volume
-                std::uniform_int_distribution<int> idx_dist(0, active_orders.size() - 1);
-                int idx = idx_dist(gen);
+                std::uniform_int_distribution<size_t> idx_dist(0, active_orders.size() - 1);
+                size_t idx = idx_dist(gen);
                 auto& order = active_orders[idx];
 
                 std::uniform_int_distribution<int> new_volume_dist(1, 500);
@@ -250,8 +250,8 @@ static void BM_MapOrderBook_MixedOps(benchmark::State& state)
             else if (op == 2 && !active_orders.empty())
             {
                 // Remove operation
-                std::uniform_int_distribution<int> idx_dist(0, active_orders.size() - 1);
-                int idx = idx_dist(gen);
+                std::uniform_int_distribution<size_t> idx_dist(0, active_orders.size() - 1);
+                size_t idx = idx_dist(gen);
                 auto order = active_orders[idx];
 
                 std::uniform_int_distribution<int> side_dist(0, 1);
@@ -264,7 +264,7 @@ static void BM_MapOrderBook_MixedOps(benchmark::State& state)
                     book.remove_ask(order.tick, order);
                 }
 
-                active_orders.erase(active_orders.begin() + idx);
+                active_orders.erase(active_orders.begin() + static_cast<std::ptrdiff_t>(idx));
             }
         }
 
@@ -429,7 +429,7 @@ static void BM_JazzyOrderBook_GetOrderAtLevel(benchmark::State& state)
     {
         // Access orders at different levels
         const int max_levels = std::min(20, 50); // Conservative estimate of actual levels
-        for (int level = 0; level < max_levels; ++level)
+        for (size_t level = 0; level < max_levels; ++level)
         {
             auto bid_order = book.bid_at_level(level);
             auto ask_order = book.ask_at_level(level);
@@ -455,7 +455,7 @@ static void BM_MapOrderBook_GetOrderAtLevel(benchmark::State& state)
     {
         // Access orders at different levels
         const int max_levels = std::min(20, 50); // Conservative estimate of actual levels
-        for (int level = 0; level < max_levels; ++level)
+        for (size_t level = 0; level < max_levels; ++level)
         {
             auto bid_order = book.bid_at_level(level);
             auto ask_order = book.ask_at_level(level);

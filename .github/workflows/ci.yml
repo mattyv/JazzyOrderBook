@@ -102,3 +102,49 @@ jobs:
           build/CMakeFiles/CMakeOutput.log
           build/CMakeFiles/CMakeError.log
           build/compile_commands.json
+
+  sanitizers:
+    name: Sanitizers (ASAN + UBSAN)
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Clang 18
+      run: |
+        wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+        sudo add-apt-repository "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-18 main" -y
+        sudo apt-get update
+        sudo apt-get install -y clang-18 clang++-18
+        echo "CC=clang-18" >> $GITHUB_ENV
+        echo "CXX=clang++-18" >> $GITHUB_ENV
+
+    - name: Create build directory
+      run: mkdir build
+
+    - name: Configure CMake with sanitizers
+      working-directory: build
+      run: |
+        cmake .. \
+          -DCMAKE_BUILD_TYPE=Debug \
+          -DENABLE_ASAN=ON \
+          -DENABLE_UBSAN=ON \
+          -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+    - name: Build
+      working-directory: build
+      run: cmake --build . --config Debug
+
+    - name: Run tests with sanitizers
+      working-directory: build
+      run: ctest --output-on-failure --build-config Debug
+
+    - name: Upload build artifacts
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-logs-sanitizers
+        path: |
+          build/CMakeFiles/CMakeOutput.log
+          build/CMakeFiles/CMakeError.log
+          build/compile_commands.json

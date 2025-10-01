@@ -91,12 +91,15 @@ inline constexpr std::size_t bits_per_block = 64;
                                       62, 55, 59, 36, 53, 51, 43, 22, 45, 39, 33, 30, 24, 18, 12, 5,
                                       63, 47, 56, 27, 60, 41, 37, 16, 54, 35, 52, 21, 44, 32, 23, 11,
                                       46, 26, 40, 15, 34, 20, 31, 10, 25, 14, 19, 9,  13, 8,  7,  6};
-    return table[((value & -value) * debruijn) >> 58];
+    // Isolate lowest set bit: value & -value can trigger MSVC warning C4146
+    // Use two's complement equivalent: value & (~value + 1)
+    return table[((value & (~value + 1)) * debruijn) >> 58];
 #endif
 }
 
 // Select the bit position (from MSB) with the given rank
 // Based on: https://graphics.stanford.edu/~seander/bithacks.html
+// Section: "Select the bit position (from the most-significant bit) with the given count (rank)"
 // rank is 0-indexed (0 = highest bit, 1 = second highest, etc.)
 [[nodiscard]] inline constexpr unsigned int select_bit_from_msb(std::uint64_t value, unsigned int rank) noexcept
 {
@@ -108,10 +111,10 @@ inline constexpr std::size_t bits_per_block = 64;
     unsigned int remaining = rank;
     while (remaining--)
     {
-        const auto msb = 63 - __builtin_clzll(word);
+        const auto msb = 63U - static_cast<unsigned int>(__builtin_clzll(word));
         word &= ~(1ULL << msb);
     }
-    return 63 - __builtin_clzll(word);
+    return 63U - static_cast<unsigned int>(__builtin_clzll(word));
 #else
     // Portable branchless implementation
     // Constants for the branchless select algorithm

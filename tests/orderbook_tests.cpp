@@ -12,7 +12,6 @@ SCENARIO("order books can have bid orders added", "[orderbook]")
         using VectorOrderBook = jazzy::order_book<int, jazzy::tests::order, test_market_stats>;
         using MapOrderBook = jazzy::benchmarks::map_order_book<int, jazzy::tests::order, test_market_stats>;
 
-        static constexpr int base = 110;
         static constexpr auto expected_size = static_cast<size_t>((130 - 90) * (1.0 + 2000 / 10000.0));
 
         auto test_empty_book = []<typename BookType>(BookType& book) { REQUIRE(book.size() == expected_size); };
@@ -76,7 +75,6 @@ SCENARIO("order books can have bid orders added", "[orderbook]")
         using VectorOrderBook = jazzy::order_book<int, jazzy::tests::order, test_market_stats>;
         using MapOrderBook = jazzy::benchmarks::map_order_book<int, jazzy::tests::order, test_market_stats>;
 
-        static constexpr int base = 110;
         static constexpr auto expected_size = static_cast<size_t>((130 - 90) * (1.0 + 2000 / 10000.0));
 
         auto setup_book_with_orders = []<typename BookType>(BookType& book) {
@@ -136,7 +134,6 @@ SCENARIO("order books can have bid orders added", "[orderbook]")
         using VectorOrderBook = jazzy::order_book<int, jazzy::tests::order, test_market_stats>;
         using MapOrderBook = jazzy::benchmarks::map_order_book<int, jazzy::tests::order, test_market_stats>;
 
-        static constexpr int base = 90;
         static constexpr auto expected_size = static_cast<size_t>((130 - 90) * (1.0 + 2000 / 10000.0));
 
         auto setup_book_with_asks = []<typename BookType>(BookType& book) {
@@ -191,7 +188,6 @@ SCENARIO("order books can have ask orders added", "[orderbook]")
         using VectorOrderBook = jazzy::order_book<int, jazzy::tests::order, test_market_stats>;
         using MapOrderBook = jazzy::benchmarks::map_order_book<int, jazzy::tests::order, test_market_stats>;
 
-        static constexpr int base = 110;
         static constexpr auto expected_size = static_cast<size_t>((130 - 90) * (1.0 + 2000 / 10000.0));
 
         auto test_empty_book = []<typename BookType>(BookType& book) { REQUIRE(book.size() == expected_size); };
@@ -254,7 +250,6 @@ SCENARIO("order books can have ask orders added", "[orderbook]")
         using VectorOrderBook = jazzy::order_book<int, jazzy::tests::order, test_market_stats>;
         using MapOrderBook = jazzy::benchmarks::map_order_book<int, jazzy::tests::order, test_market_stats>;
 
-        static constexpr int base = 110;
         static constexpr auto expected_size = static_cast<size_t>((130 - 90) * (1.0 + 2000 / 10000.0));
 
         auto setup_non_empty_book = []<typename BookType>(BookType& book) {
@@ -297,9 +292,6 @@ SCENARIO("order books can have bid orders modified", "[orderbook]")
     {
         using VectorOrderBook = jazzy::order_book<int, jazzy::tests::order, test_market_stats>;
         using MapOrderBook = jazzy::benchmarks::map_order_book<int, jazzy::tests::order, test_market_stats>;
-
-        static constexpr int bid_base = 110;
-        static constexpr int ask_base = 120;
 
         auto setup_book_with_multiple_bids = []<typename BookType>(BookType& book) {
             book.insert_bid(105, jazzy::tests::order{.order_id = 1, .volume = 10});
@@ -391,9 +383,6 @@ SCENARIO("order books can have bid orders removed", "[orderbook]")
         using VectorOrderBook = jazzy::order_book<int, jazzy::tests::order, test_market_stats>;
         using MapOrderBook = jazzy::benchmarks::map_order_book<int, jazzy::tests::order, test_market_stats>;
 
-        static constexpr int bid_base = 110;
-        static constexpr int ask_base = 120;
-
         auto setup_book_for_removal = []<typename BookType>(BookType& book) {
             book.insert_bid(105, jazzy::tests::order{.order_id = 1, .volume = 10});
             book.insert_bid(104, jazzy::tests::order{.order_id = 2, .volume = 15});
@@ -479,9 +468,6 @@ SCENARIO("order books can have ask orders modified", "[orderbook]")
     {
         using VectorOrderBook = jazzy::order_book<int, jazzy::tests::order, test_market_stats>;
         using MapOrderBook = jazzy::benchmarks::map_order_book<int, jazzy::tests::order, test_market_stats>;
-
-        static constexpr int bid_base = 110;
-        static constexpr int ask_base = 120;
 
         auto setup_book_with_multiple_asks = []<typename BookType>(BookType& book) {
             book.insert_ask(121, jazzy::tests::order{.order_id = 1, .volume = 10});
@@ -572,9 +558,6 @@ SCENARIO("order books can have ask orders removed", "[orderbook]")
     {
         using VectorOrderBook = jazzy::order_book<int, jazzy::tests::order, test_market_stats>;
         using MapOrderBook = jazzy::benchmarks::map_order_book<int, jazzy::tests::order, test_market_stats>;
-
-        static constexpr int bid_base = 110;
-        static constexpr int ask_base = 120;
 
         auto setup_book_for_ask_removal = []<typename BookType>(BookType& book) {
             book.insert_ask(121, jazzy::tests::order{.order_id = 1, .volume = 10});
@@ -1024,11 +1007,6 @@ SCENARIO("order book market stats sizing", "[orderbook][sizing]")
                 REQUIRE(small_book.bid_volume_at_tick(100) == 10);
                 REQUIRE(large_book.bid_volume_at_tick(150) == 20);
             };
-
-            VectorSmallBook vector_small_book{};
-            VectorLargeBook vector_large_book{};
-            MapSmallBook map_small_book{};
-            MapLargeBook map_large_book{};
 
             test_order_handling(vector_small_book, vector_large_book);
             test_order_handling(map_small_book, map_large_book);

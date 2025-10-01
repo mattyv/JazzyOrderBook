@@ -49,7 +49,7 @@ namespace select64 {
 constexpr std::array<uint8_t, 256> make_pop8()
 {
     std::array<uint8_t, 256> t{};
-    for (int v = 0; v < 256; ++v)
+    for (unsigned int v = 0; v < 256; ++v)
     {
         t[v] = static_cast<uint8_t>(std::popcount(static_cast<uint8_t>(v)));
     }
@@ -64,7 +64,7 @@ constexpr auto POP8 = make_pop8();
 constexpr std::array<std::array<uint8_t, 8>, 256> make_sel8()
 {
     std::array<std::array<uint8_t, 8>, 256> T{};
-    for (int v = 0; v < 256; ++v)
+    for (unsigned int v = 0; v < 256; ++v)
     {
         uint8_t x = static_cast<uint8_t>(v);
         uint8_t k = 0;
@@ -88,7 +88,7 @@ constexpr auto SEL8 = make_sel8();
 // Precondition: 0 <= n < popcount(mask), otherwise throws.
 inline int select_nth_set_bit_portable(uint64_t mask, unsigned n)
 {
-    const unsigned total = std::popcount(mask);
+    const unsigned total = static_cast<unsigned>(std::popcount(mask));
     if (n >= total)
         throw std::out_of_range("n out of range");
 
@@ -152,7 +152,7 @@ __attribute__((target("bmi2")))
 inline int
 select_nth_set_bit_bmi2(uint64_t mask, unsigned n)
 {
-    const unsigned total = std::popcount(mask);
+    const unsigned total = static_cast<unsigned>(std::popcount(mask));
     if (n >= total)
         throw std::out_of_range("n out of range");
 

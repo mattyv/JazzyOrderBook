@@ -336,8 +336,9 @@ public:
     [[nodiscard]] size_type size() const noexcept
     {
         // Return the theoretical maximum size based on market range
-        return static_cast<size_t>(MarketStats::daily_high_v.value() - MarketStats::daily_low_v.value()) *
-            (1.0 + MarketStats::expected_range_v);
+        const double range = static_cast<double>(MarketStats::daily_high_v.value() - MarketStats::daily_low_v.value());
+        const double multiplier = 1.0 + MarketStats::expected_range_v;
+        return static_cast<size_t>(range * multiplier);
     }
 
     [[nodiscard]] size_type low() const noexcept { return 0; }
