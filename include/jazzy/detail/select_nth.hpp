@@ -152,7 +152,7 @@ __attribute__((target("bmi2")))
 inline int
 select_nth_set_bit_bmi2(uint64_t mask, unsigned n)
 {
-    const unsigned total = std::popcount(mask);
+    const unsigned total = static_cast<unsigned>(std::popcount(mask));
     if (n >= total)
         throw std::out_of_range("n out of range");
 
