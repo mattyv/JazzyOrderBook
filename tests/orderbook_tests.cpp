@@ -1008,11 +1008,6 @@ SCENARIO("order book market stats sizing", "[orderbook][sizing]")
                 REQUIRE(large_book.bid_volume_at_tick(150) == 20);
             };
 
-            VectorSmallBook vector_small_book{};
-            VectorLargeBook vector_large_book{};
-            MapSmallBook map_small_book{};
-            MapLargeBook map_large_book{};
-
             test_order_handling(vector_small_book, vector_large_book);
             test_order_handling(map_small_book, map_large_book);
         }
