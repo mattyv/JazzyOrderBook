@@ -531,4 +531,226 @@ BENCHMARK(BM_MapOrderBook_GetOrderAtLevel)->Range(8, 8 << 10)->Complexity();
 BENCHMARK(BM_JazzyOrderBook_MixedOps)->Range(8, 8 << 10)->Complexity();
 BENCHMARK(BM_MapOrderBook_MixedOps)->Range(8, 8 << 10)->Complexity();
 
+// FIFO vs Aggregate Storage Benchmarks
+using fifo_storage = jazzy::detail::fifo_level_storage<jazzy::tests::order, std::allocator<jazzy::tests::order>>;
+using FifoOrderBook = jazzy::order_book<int, jazzy::tests::order, test_market_stats, std::allocator<jazzy::tests::order>, fifo_storage>;
+
+static void BM_AggregateOrderBook_AddOrders(benchmark::State& state)
+{
+    for (auto _ : state)
+    {
+        VectorOrderBook book{};
+        for (int i = 0; i < state.range(0); ++i)
+        {
+            auto order = generate_random_order(i);
+            add_random_order(book, order);
+        }
+        benchmark::DoNotOptimize(book);
+    }
+    state.SetComplexityN(state.range(0));
+}
+
+static void BM_FifoOrderBook_AddOrders(benchmark::State& state)
+{
+    for (auto _ : state)
+    {
+        FifoOrderBook book{};
+        for (int i = 0; i < state.range(0); ++i)
+        {
+            auto order = generate_random_order(i);
+            add_random_order(book, order);
+        }
+        benchmark::DoNotOptimize(book);
+    }
+    state.SetComplexityN(state.range(0));
+}
+
+static void BM_AggregateOrderBook_UpdateOrders(benchmark::State& state)
+{
+    for (auto _ : state)
+    {
+        VectorOrderBook book{};
+        std::vector<jazzy::tests::order> orders;
+        for (int i = 0; i < state.range(0); ++i)
+        {
+            auto order = generate_random_order(i);
+            orders.push_back(order);
+            add_random_order(book, order);
+        }
+
+        std::uniform_int_distribution<int> volume_dist(1, 1000);
+        for (auto& order : orders)
+        {
+            order.volume = volume_dist(gen);
+            std::uniform_int_distribution<int> side_dist(0, 1);
+            if (side_dist(gen) == 0)
+                book.update_bid(order.tick, order);
+            else
+                book.update_ask(order.tick, order);
+        }
+        benchmark::DoNotOptimize(book);
+    }
+    state.SetComplexityN(state.range(0));
+}
+
+static void BM_FifoOrderBook_UpdateOrders(benchmark::State& state)
+{
+    for (auto _ : state)
+    {
+        FifoOrderBook book{};
+        std::vector<jazzy::tests::order> orders;
+        for (int i = 0; i < state.range(0); ++i)
+        {
+            auto order = generate_random_order(i);
+            orders.push_back(order);
+            add_random_order(book, order);
+        }
+
+        std::uniform_int_distribution<int> volume_dist(1, 1000);
+        for (auto& order : orders)
+        {
+            order.volume = volume_dist(gen);
+            std::uniform_int_distribution<int> side_dist(0, 1);
+            if (side_dist(gen) == 0)
+                book.update_bid(order.tick, order);
+            else
+                book.update_ask(order.tick, order);
+        }
+        benchmark::DoNotOptimize(book);
+    }
+    state.SetComplexityN(state.range(0));
+}
+
+static void BM_AggregateOrderBook_MixedOps(benchmark::State& state)
+{
+    for (auto _ : state)
+    {
+        VectorOrderBook book{};
+        std::vector<jazzy::tests::order> active_orders;
+        const std::int64_t num_ops = state.range(0);
+        std::uniform_int_distribution<int> op_dist(0, 2);
+
+        for (std::int64_t i = 0; i < num_ops; ++i)
+        {
+            int op = op_dist(gen);
+            if (op == 0 || active_orders.empty())
+            {
+                auto order = generate_random_order(static_cast<int>(i));
+                active_orders.push_back(order);
+                add_random_order(book, order);
+            }
+            else if (op == 1 && !active_orders.empty())
+            {
+                std::uniform_int_distribution<size_t> idx_dist(0, active_orders.size() - 1);
+                size_t idx = idx_dist(gen);
+                auto& order = active_orders[idx];
+                std::uniform_int_distribution<int> new_volume_dist(1, 500);
+                order.volume = new_volume_dist(gen);
+                std::uniform_int_distribution<int> side_dist(0, 1);
+                if (side_dist(gen) == 0)
+                    book.update_bid(order.tick, order);
+                else
+                    book.update_ask(order.tick, order);
+            }
+            else if (!active_orders.empty())
+            {
+                std::uniform_int_distribution<size_t> idx_dist(0, active_orders.size() - 1);
+                size_t idx = idx_dist(gen);
+                auto order = active_orders[idx];
+                std::uniform_int_distribution<int> side_dist(0, 1);
+                if (side_dist(gen) == 0)
+                    book.remove_bid(order.tick, order);
+                else
+                    book.remove_ask(order.tick, order);
+                active_orders.erase(active_orders.begin() + static_cast<std::ptrdiff_t>(idx));
+            }
+        }
+        benchmark::DoNotOptimize(book);
+    }
+    state.SetComplexityN(state.range(0));
+}
+
+static void BM_FifoOrderBook_MixedOps(benchmark::State& state)
+{
+    for (auto _ : state)
+    {
+        FifoOrderBook book{};
+        std::vector<jazzy::tests::order> active_orders;
+        const std::int64_t num_ops = state.range(0);
+        std::uniform_int_distribution<int> op_dist(0, 2);
+
+        for (std::int64_t i = 0; i < num_ops; ++i)
+        {
+            int op = op_dist(gen);
+            if (op == 0 || active_orders.empty())
+            {
+                auto order = generate_random_order(static_cast<int>(i));
+                active_orders.push_back(order);
+                add_random_order(book, order);
+            }
+            else if (op == 1 && !active_orders.empty())
+            {
+                std::uniform_int_distribution<size_t> idx_dist(0, active_orders.size() - 1);
+                size_t idx = idx_dist(gen);
+                auto& order = active_orders[idx];
+                std::uniform_int_distribution<int> new_volume_dist(1, 500);
+                order.volume = new_volume_dist(gen);
+                std::uniform_int_distribution<int> side_dist(0, 1);
+                if (side_dist(gen) == 0)
+                    book.update_bid(order.tick, order);
+                else
+                    book.update_ask(order.tick, order);
+            }
+            else if (!active_orders.empty())
+            {
+                std::uniform_int_distribution<size_t> idx_dist(0, active_orders.size() - 1);
+                size_t idx = idx_dist(gen);
+                auto order = active_orders[idx];
+                std::uniform_int_distribution<int> side_dist(0, 1);
+                if (side_dist(gen) == 0)
+                    book.remove_bid(order.tick, order);
+                else
+                    book.remove_ask(order.tick, order);
+                active_orders.erase(active_orders.begin() + static_cast<std::ptrdiff_t>(idx));
+            }
+        }
+        benchmark::DoNotOptimize(book);
+    }
+    state.SetComplexityN(state.range(0));
+}
+
+static void BM_FifoOrderBook_FrontOrderLookup(benchmark::State& state)
+{
+    FifoOrderBook book{};
+    for (int i = 0; i < state.range(0); ++i)
+    {
+        auto order = generate_random_order(i);
+        add_random_order(book, order);
+    }
+
+    for (auto _ : state)
+    {
+        const int max_levels = std::min(20, 50);
+        for (size_t level = 0; level < max_levels; ++level)
+        {
+            auto bid_order = book.front_order_at_bid_level(level);
+            auto ask_order = book.front_order_at_ask_level(level);
+            benchmark::DoNotOptimize(bid_order);
+            benchmark::DoNotOptimize(ask_order);
+        }
+    }
+    state.SetComplexityN(state.range(0));
+}
+
+BENCHMARK(BM_AggregateOrderBook_AddOrders)->Range(8, 8 << 10)->Complexity();
+BENCHMARK(BM_FifoOrderBook_AddOrders)->Range(8, 8 << 10)->Complexity();
+
+BENCHMARK(BM_AggregateOrderBook_UpdateOrders)->Range(8, 8 << 10)->Complexity();
+BENCHMARK(BM_FifoOrderBook_UpdateOrders)->Range(8, 8 << 10)->Complexity();
+
+BENCHMARK(BM_AggregateOrderBook_MixedOps)->Range(8, 8 << 10)->Complexity();
+BENCHMARK(BM_FifoOrderBook_MixedOps)->Range(8, 8 << 10)->Complexity();
+
+BENCHMARK(BM_FifoOrderBook_FrontOrderLookup)->Range(8, 8 << 10)->Complexity();
+
 BENCHMARK_MAIN();

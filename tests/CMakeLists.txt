@@ -2,8 +2,8 @@ project(tests)
 add_executable(${PROJECT_NAME}
     main.cpp
     orderbook_tests.cpp
+    fifo_orderbook_tests.cpp
     select_nth_test.cpp
-    out_of_range_tests.cpp
     tick_type_strong_tests.cpp
     best_price_regression_tests.cpp
     level_bitmap_tests.cpp
