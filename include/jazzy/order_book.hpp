@@ -187,20 +187,15 @@ public:
         , allocator_(allocator_traits::select_on_container_copy_construction(other.allocator_))
     {}
 
-    // Allocator-aware move constructor (trailing-allocator convention)
-    order_book(order_book&& other, const allocator_type& alloc)
+    order_book(order_book&& other) noexcept(std::is_nothrow_move_constructible_v<allocator_type>)
         : best_bid_(std::move(other.best_bid_))
         , best_ask_(std::move(other.best_ask_))
         , bid_bitmap_(std::move(other.bid_bitmap_))
         , ask_bitmap_(std::move(other.ask_bitmap_))
-        , bids_(std::move(other.bids_), level_allocator_type(alloc))
-        , asks_(std::move(other.asks_), level_allocator_type(alloc))
-        , orders_(std::move(other.orders_), order_storage_allocator_type(alloc))
-        , allocator_(alloc)
-    {}
-
-    order_book(order_book&& other) noexcept(std::is_nothrow_move_constructible_v<allocator_type>)
-        : order_book(std::move(other), other.allocator_)
+        , bids_(std::move(other.bids_))
+        , asks_(std::move(other.asks_))
+        , orders_(std::move(other.orders_))
+        , allocator_(std::move(other.allocator_))
     {}
 
     order_book& operator=(const order_book& other)
