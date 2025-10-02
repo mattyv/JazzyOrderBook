@@ -33,6 +33,28 @@ class order_book
     struct level
     {
         volume_type volume{};
+
+        // Default constructor
+        level() = default;
+
+        // Allocator-extended default constructor
+        // If volume_type uses allocators, construct it with the allocator; otherwise ignore
+        template <typename Alloc>
+        explicit level(std::allocator_arg_t, const Alloc& alloc)
+            : volume(std::make_obj_using_allocator<volume_type>(alloc))
+        {}
+
+        // Allocator-extended copy constructor
+        template <typename Alloc>
+        level(std::allocator_arg_t, const Alloc& alloc, const level& other)
+            : volume(std::make_obj_using_allocator<volume_type>(alloc, other.volume))
+        {}
+
+        // Allocator-extended move constructor
+        template <typename Alloc>
+        level(std::allocator_arg_t, const Alloc& alloc, level&& other)
+            : volume(std::make_obj_using_allocator<volume_type>(alloc, std::move(other.volume)))
+        {}
     };
 
 public:
