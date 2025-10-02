@@ -225,11 +225,15 @@ public:
         {
             if constexpr (propagate_on_container_move_assignment::value)
             {
-                // Propagate allocator and move
+                // Propagate allocator and move everything
                 allocator_ = std::move(other.allocator_);
                 bids_ = std::move(other.bids_);
                 asks_ = std::move(other.asks_);
                 orders_ = std::move(other.orders_);
+                best_bid_ = std::move(other.best_bid_);
+                best_ask_ = std::move(other.best_ask_);
+                bid_bitmap_ = std::move(other.bid_bitmap_);
+                ask_bitmap_ = std::move(other.ask_bitmap_);
             }
             else
             {
@@ -240,20 +244,23 @@ public:
                     bids_ = std::move(other.bids_);
                     asks_ = std::move(other.asks_);
                     orders_ = std::move(other.orders_);
+                    best_bid_ = std::move(other.best_bid_);
+                    best_ask_ = std::move(other.best_ask_);
+                    bid_bitmap_ = std::move(other.bid_bitmap_);
+                    ask_bitmap_ = std::move(other.ask_bitmap_);
                 }
                 else
                 {
-                    // Different allocators, must copy
+                    // Different allocators, must copy everything to keep source valid
                     bids_ = other.bids_;
                     asks_ = other.asks_;
                     orders_ = other.orders_;
+                    best_bid_ = other.best_bid_;
+                    best_ask_ = other.best_ask_;
+                    bid_bitmap_ = other.bid_bitmap_;
+                    ask_bitmap_ = other.ask_bitmap_;
                 }
             }
-
-            best_bid_ = std::move(other.best_bid_);
-            best_ask_ = std::move(other.best_ask_);
-            bid_bitmap_ = std::move(other.bid_bitmap_);
-            ask_bitmap_ = std::move(other.ask_bitmap_);
         }
         return *this;
     }
