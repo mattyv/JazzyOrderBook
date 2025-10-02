@@ -108,8 +108,7 @@ inline constexpr std::size_t bits_per_block = 64;
 #if JAZZY_HAS_BUILTIN_CLZ && JAZZY_HAS_BUILTIN_POPCOUNT
     // Use fast builtin path when available
     std::uint64_t word = value;
-    unsigned int remaining = rank;
-    while (remaining--)
+    for (unsigned int i = 0; i < rank; ++i)
     {
         const auto msb = 63U - static_cast<unsigned int>(__builtin_clzll(word));
         word &= ~(1ULL << msb);
@@ -242,8 +241,9 @@ public:
 
     [[nodiscard]] int find_highest() const noexcept
     {
-        for (std::size_t block = block_count; block-- > 0;)
+        for (std::size_t block = block_count; block > 0;)
         {
+            --block;
             const std::uint64_t word = blocks_[block];
             if (word != 0)
             {
@@ -269,7 +269,7 @@ public:
             const std::size_t block_pop = level_bitmap_detail::popcount(word);
             if (remaining < block_pop)
             {
-                while (remaining--)
+                for (std::size_t i = 0; i < remaining; ++i)
                 {
                     word &= word - 1; // drop lowest set bit
                 }
@@ -291,8 +291,9 @@ public:
         }
 
         std::size_t remaining = rank;
-        for (std::size_t block = block_count; block-- > 0;)
+        for (std::size_t block = block_count; block > 0;)
         {
+            --block;
             std::uint64_t word = blocks_[block];
             const std::size_t block_pop = level_bitmap_detail::popcount(word);
             if (remaining < block_pop)
@@ -391,8 +392,7 @@ public:
         }
 
         std::uint64_t word = bits_;
-        std::size_t remaining = rank;
-        while (remaining--)
+        for (std::size_t i = 0; i < rank; ++i)
         {
             word &= word - 1; // drop lowest set bit
         }

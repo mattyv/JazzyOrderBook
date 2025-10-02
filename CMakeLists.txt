@@ -40,8 +40,8 @@ endif()
 
 if(ENABLE_UBSAN)
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
-        add_compile_options(-fsanitize=undefined -fno-sanitize-recover=all)
-        add_link_options(-fsanitize=undefined)
+        add_compile_options(-fsanitize=undefined,integer,nullability,implicit-conversion,local-bounds,float-divide-by-zero -fno-sanitize-recover=all)
+        add_link_options(-fsanitize=undefined,integer,nullability,implicit-conversion,local-bounds,float-divide-by-zero)
     endif()
 endif()
 
