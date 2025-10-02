@@ -273,29 +273,52 @@ static void BM_MapOrderBook_MixedOps(benchmark::State& state)
     state.SetComplexityN(state.range(0));
 }
 
-// Benchmark: Update orders in populated order book
+// Benchmark: Update orders with realistic distribution (75% in top 5 price levels)
 static void BM_JazzyOrderBook_UpdateOrders(benchmark::State& state)
 {
     VectorOrderBook book{};
-    std::vector<jazzy::tests::order> orders;
+    std::vector<jazzy::tests::order> hot_orders; // Top 5 price levels (near best bid/ask)
+    std::vector<jazzy::tests::order> cold_orders; // Remaining price levels
 
-    // Pre-populate the order book
-    for (int i = 0; i < state.range(0); ++i)
+    const int64_t total_orders = state.range(0);
+    // Distribute orders: ~20% in top 5 levels, rest spread out
+    const int64_t hot_count = std::max(int64_t(5), total_orders / 5);
+
+    std::uniform_int_distribution<int> volume_dist(1, 1000);
+
+    // Pre-populate hot orders: top 5 price levels (ticks 108-112 around mid 110)
+    std::uniform_int_distribution<int> hot_tick_dist(108, 112);
+    for (int i = 0; i < hot_count; ++i)
     {
-        auto order = generate_random_order(i);
-        orders.push_back(order);
+        jazzy::tests::order order{i, volume_dist(gen), hot_tick_dist(gen)};
+        hot_orders.push_back(order);
         add_random_order(book, order);
     }
 
+    // Pre-populate cold orders: spread across full range
+    std::uniform_int_distribution<int> cold_tick_dist(90, 130);
+    for (int64_t i = hot_count; i < total_orders; ++i)
+    {
+        jazzy::tests::order order{static_cast<int>(i), volume_dist(gen), cold_tick_dist(gen)};
+        cold_orders.push_back(order);
+        add_random_order(book, order);
+    }
+
+    std::uniform_int_distribution<int> update_dist(0, 99); // 0-99 for percentage
+    std::uniform_int_distribution<int> side_dist(0, 1);
+
     for (auto _ : state)
     {
-        // Update each order with new volume
-        for (auto& order : orders)
+        // Realistic: 75% of updates hit hot orders (top 5% of levels)
+        for (int64_t i = 0; i < total_orders; ++i)
         {
-            std::uniform_int_distribution<int> volume_dist(1, 1000);
+            bool update_hot = update_dist(gen) < 75; // 75% chance
+            auto& order = update_hot && !hot_orders.empty()
+                ? hot_orders[static_cast<size_t>(i) % hot_orders.size()]
+                : cold_orders[static_cast<size_t>(i) % std::max(size_t(1), cold_orders.size())];
+
             order.volume = volume_dist(gen);
 
-            std::uniform_int_distribution<int> side_dist(0, 1);
             if (side_dist(gen) == 0)
             {
                 book.update_bid(order.tick, order);
@@ -313,25 +336,48 @@ static void BM_JazzyOrderBook_UpdateOrders(benchmark::State& state)
 static void BM_MapOrderBook_UpdateOrders(benchmark::State& state)
 {
     MapOrderBook book{};
-    std::vector<jazzy::tests::order> orders;
+    std::vector<jazzy::tests::order> hot_orders; // Top 5 price levels (near best bid/ask)
+    std::vector<jazzy::tests::order> cold_orders; // Remaining price levels
 
-    // Pre-populate the order book
-    for (int i = 0; i < state.range(0); ++i)
+    const int64_t total_orders = state.range(0);
+    // Distribute orders: ~20% in top 5 levels, rest spread out
+    const int64_t hot_count = std::max(int64_t(5), total_orders / 5);
+
+    std::uniform_int_distribution<int> volume_dist(1, 1000);
+
+    // Pre-populate hot orders: top 5 price levels (ticks 108-112 around mid 110)
+    std::uniform_int_distribution<int> hot_tick_dist(108, 112);
+    for (int i = 0; i < hot_count; ++i)
     {
-        auto order = generate_random_order(i);
-        orders.push_back(order);
+        jazzy::tests::order order{i, volume_dist(gen), hot_tick_dist(gen)};
+        hot_orders.push_back(order);
         add_random_order(book, order);
     }
 
+    // Pre-populate cold orders: spread across full range
+    std::uniform_int_distribution<int> cold_tick_dist(90, 130);
+    for (int64_t i = hot_count; i < total_orders; ++i)
+    {
+        jazzy::tests::order order{static_cast<int>(i), volume_dist(gen), cold_tick_dist(gen)};
+        cold_orders.push_back(order);
+        add_random_order(book, order);
+    }
+
+    std::uniform_int_distribution<int> update_dist(0, 99); // 0-99 for percentage
+    std::uniform_int_distribution<int> side_dist(0, 1);
+
     for (auto _ : state)
     {
-        // Update each order with new volume
-        for (auto& order : orders)
+        // Realistic: 75% of updates hit hot orders (top 5% of levels)
+        for (int64_t i = 0; i < total_orders; ++i)
         {
-            std::uniform_int_distribution<int> volume_dist(1, 1000);
+            bool update_hot = update_dist(gen) < 75; // 75% chance
+            auto& order = update_hot && !hot_orders.empty()
+                ? hot_orders[static_cast<size_t>(i) % hot_orders.size()]
+                : cold_orders[static_cast<size_t>(i) % std::max(size_t(1), cold_orders.size())];
+
             order.volume = volume_dist(gen);
 
-            std::uniform_int_distribution<int> side_dist(0, 1);
             if (side_dist(gen) == 0)
             {
                 book.update_bid(order.tick, order);

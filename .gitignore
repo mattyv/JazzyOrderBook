@@ -51,3 +51,11 @@ benchmark_results/*_new.txt
 
 # CTest output
 Testing/
+
+# Python virtual environment
+scripts/venv/
+*.pyc
+__pycache__/
+
+# Benchmark visualization outputs
+benchmark_results/*.json
