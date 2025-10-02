@@ -37,6 +37,12 @@ class order_book
         // Default constructor
         level() = default;
 
+        // Copy and move constructors with proper noexcept specifications
+        level(const level&) = default;
+        level(level&&) noexcept(std::is_nothrow_move_constructible_v<volume_type>) = default;
+        level& operator=(const level&) = default;
+        level& operator=(level&&) noexcept(std::is_nothrow_move_assignable_v<volume_type>) = default;
+
         // Allocator-extended default constructor
         // If volume_type uses allocators, construct it with the allocator; otherwise ignore
         template <typename Alloc>
