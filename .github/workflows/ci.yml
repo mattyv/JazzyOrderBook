@@ -91,7 +91,8 @@ jobs:
 
     - name: Run tests
       working-directory: build
-      run: ctest --output-on-failure --build-config ${{ matrix.build_type }}
+      timeout-minutes: 5
+      run: ctest --output-on-failure --build-config ${{ matrix.build_type }} --timeout 60 --verbose
 
     - name: Upload build artifacts
       if: failure()
