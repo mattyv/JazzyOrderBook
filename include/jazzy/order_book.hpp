@@ -18,7 +18,7 @@ namespace jazzy {
 template <typename TickType, typename OrderType, typename MarketStats, typename Allocator = std::allocator<OrderType>>
 requires tick<TickType> && order<OrderType> && market_stats<MarketStats> &&
     std::same_as<typename MarketStats::tick_type, TickType> &&
-    std::same_as<typename std::allocator_traits<Allocator>::value_type, OrderType>
+    std::same_as<typename std::allocator_traits<Allocator>::value_type, OrderType> && compatible_allocator<Allocator>
 class order_book
 {
     using order_type = OrderType;
@@ -46,6 +46,10 @@ private:
     using order_map_value_type = std::pair<const id_type, order_type>;
     using level_allocator_type = typename allocator_traits::template rebind_alloc<level>;
     using order_storage_allocator_type = typename allocator_traits::template rebind_alloc<order_map_value_type>;
+
+    using propagate_on_container_copy_assignment = typename allocator_traits::propagate_on_container_copy_assignment;
+    using propagate_on_container_move_assignment = typename allocator_traits::propagate_on_container_move_assignment;
+    using propagate_on_container_swap = typename allocator_traits::propagate_on_container_swap;
 
     static constexpr size_type calculate_size(
         const tick_type_strong& daily_high, const tick_type_strong& daily_low, double expected_range)
@@ -135,6 +139,106 @@ public:
         bids_.resize(size_);
         asks_.resize(size_);
         orders_.reserve(size_ * 10); // Arbitrary factor to reduce rehashing
+    }
+
+    ~order_book() = default;
+
+    // Copy constructor - uses select_on_container_copy_construction
+    order_book(const order_book& other)
+        : best_bid_(other.best_bid_)
+        , best_ask_(other.best_ask_)
+        , bid_bitmap_(other.bid_bitmap_)
+        , ask_bitmap_(other.ask_bitmap_)
+        , bids_(
+              other.bids_,
+              level_allocator_type(allocator_traits::select_on_container_copy_construction(other.allocator_)))
+        , asks_(
+              other.asks_,
+              level_allocator_type(allocator_traits::select_on_container_copy_construction(other.allocator_)))
+        , orders_(
+              other.orders_,
+              order_storage_allocator_type(allocator_traits::select_on_container_copy_construction(other.allocator_)))
+        , allocator_(allocator_traits::select_on_container_copy_construction(other.allocator_))
+    {}
+
+    // Move constructor - conditionally noexcept based on allocator
+    order_book(order_book&& other) noexcept(std::is_nothrow_move_constructible_v<allocator_type>)
+        : best_bid_(std::move(other.best_bid_))
+        , best_ask_(std::move(other.best_ask_))
+        , bid_bitmap_(std::move(other.bid_bitmap_))
+        , ask_bitmap_(std::move(other.ask_bitmap_))
+        , bids_(std::move(other.bids_))
+        , asks_(std::move(other.asks_))
+        , orders_(std::move(other.orders_))
+        , allocator_(std::move(other.allocator_))
+    {}
+
+    order_book& operator=(const order_book& other)
+    {
+        if (this != &other)
+        {
+            // Create a copy, then swap with it (copy-and-swap idiom)
+            order_book temp(other);
+
+            using std::swap;
+
+            // Handle allocator propagation
+            if constexpr (propagate_on_container_copy_assignment::value)
+            {
+                swap(allocator_, temp.allocator_);
+            }
+
+            // Swap all data members
+            swap(best_bid_, temp.best_bid_);
+            swap(best_ask_, temp.best_ask_);
+            swap(bid_bitmap_, temp.bid_bitmap_);
+            swap(ask_bitmap_, temp.ask_bitmap_);
+            swap(bids_, temp.bids_);
+            swap(asks_, temp.asks_);
+            swap(orders_, temp.orders_);
+        }
+        return *this;
+    }
+
+    // Move assignment - handles propagate_on_container_move_assignment
+    order_book& operator=(order_book&& other) noexcept(
+        propagate_on_container_move_assignment::value || allocator_traits::is_always_equal::value)
+    {
+        if (this != &other)
+        {
+            if constexpr (propagate_on_container_move_assignment::value)
+            {
+                // Propagate allocator and move
+                allocator_ = std::move(other.allocator_);
+                bids_ = std::move(other.bids_);
+                asks_ = std::move(other.asks_);
+                orders_ = std::move(other.orders_);
+            }
+            else
+            {
+                // Check if allocators are equal
+                if (allocator_ == other.allocator_)
+                {
+                    // Same allocator, can move efficiently
+                    bids_ = std::move(other.bids_);
+                    asks_ = std::move(other.asks_);
+                    orders_ = std::move(other.orders_);
+                }
+                else
+                {
+                    // Different allocators, must copy
+                    bids_ = other.bids_;
+                    asks_ = other.asks_;
+                    orders_ = other.orders_;
+                }
+            }
+
+            best_bid_ = std::move(other.best_bid_);
+            best_ask_ = std::move(other.best_ask_);
+            bid_bitmap_ = std::move(other.bid_bitmap_);
+            ask_bitmap_ = std::move(other.ask_bitmap_);
+        }
+        return *this;
     }
 
     template <typename U>
@@ -542,7 +646,7 @@ public:
     bid_storage bids_;
     ask_storage asks_;
     order_storage orders_;
-    allocator_type allocator_{};
+    [[no_unique_address]] allocator_type allocator_;
 };
 
 } // namespace jazzy

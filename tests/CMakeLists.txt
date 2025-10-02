@@ -7,7 +7,8 @@ add_executable(${PROJECT_NAME}
     tick_type_strong_tests.cpp
     best_price_regression_tests.cpp
     level_bitmap_tests.cpp
-    level_bitmap_portable_tests.cpp)
+    level_bitmap_portable_tests.cpp
+    allocator_tests.cpp)
 
 target_link_libraries(${PROJECT_NAME} PRIVATE jazzy)
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_23)
