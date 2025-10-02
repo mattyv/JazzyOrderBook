@@ -71,7 +71,6 @@ private:
 
     using propagate_on_container_copy_assignment = typename allocator_traits::propagate_on_container_copy_assignment;
     using propagate_on_container_move_assignment = typename allocator_traits::propagate_on_container_move_assignment;
-    using propagate_on_container_swap = typename allocator_traits::propagate_on_container_swap;
 
     static constexpr size_type calculate_size(
         const tick_type_strong& daily_high, const tick_type_strong& daily_low, double expected_range)
@@ -165,7 +164,6 @@ public:
 
     ~order_book() = default;
 
-    // Copy constructor - uses select_on_container_copy_construction
     order_book(const order_book& other)
         : best_bid_(other.best_bid_)
         , best_ask_(other.best_ask_)
@@ -183,7 +181,6 @@ public:
         , allocator_(allocator_traits::select_on_container_copy_construction(other.allocator_))
     {}
 
-    // Move constructor - conditionally noexcept based on allocator
     order_book(order_book&& other) noexcept(std::is_nothrow_move_constructible_v<allocator_type>)
         : best_bid_(std::move(other.best_bid_))
         , best_ask_(std::move(other.best_ask_))
@@ -210,7 +207,6 @@ public:
                 swap(allocator_, temp.allocator_);
             }
 
-            // Swap all data members
             swap(best_bid_, temp.best_bid_);
             swap(best_ask_, temp.best_ask_);
             swap(bid_bitmap_, temp.bid_bitmap_);
@@ -222,7 +218,6 @@ public:
         return *this;
     }
 
-    // Move assignment - handles propagate_on_container_move_assignment
     order_book& operator=(order_book&& other) noexcept(
         propagate_on_container_move_assignment::value || allocator_traits::is_always_equal::value)
     {
