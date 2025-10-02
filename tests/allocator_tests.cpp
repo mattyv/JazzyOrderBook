@@ -158,8 +158,8 @@ SCENARIO("order books work with stateful allocators", "[orderbook][allocator]")
             }
         }
 
-// Skip move constructor test on MSVC Debug builds - causes timeout during cleanup
-#if !defined(_MSC_VER) || defined(NDEBUG)
+// Skip move constructor test on MSVC - STL allocates during move
+#ifndef _MSC_VER
         WHEN("Move constructing an order book")
         {
             alloc_count = 0;
