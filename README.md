@@ -109,6 +109,41 @@ Sample outputs are stored under `benchmark_results/`. The helper script
 your CPU (using `scripts/detect_hardware.sh`), and lets you diff against the
 current best run.
 
+### Realistic Workload Distribution
+
+The update benchmarks use a realistic access pattern that mirrors production order book behavior:
+- **75% of all update operations** target orders in the **top 5 price levels** (best bid/ask and nearby ticks)
+- **25% of updates** are spread across the remaining price levels
+
+This concentration reflects real market microstructure where liquidity clusters at the inside spread.
+Even under this challenging workload, `jazzy::order_book` maintains significant performance advantages
+over map-based implementations at production scale (N≥512 orders).
+
+### Benchmark Visualization
+
+The project includes a Python visualization tool to generate performance comparison charts:
+
+```bash
+# Install dependencies
+pip install -r scripts/requirements.txt
+
+# Run benchmarks and generate charts
+python3 scripts/visualize_benchmarks.py
+
+# Use existing benchmark results
+python3 scripts/visualize_benchmarks.py --json-input benchmark_results/your_results.json
+```
+
+The script generates several visualization types in the [benchmark_results/](benchmark_results/) directory:
+
+#### Performance Summary
+![Summary of all operations](benchmark_results/summary_all_operations.png)
+
+#### Bar Chart Comparison
+![Bar chart comparison](benchmark_results/bar_comparison.png)
+
+See [scripts/README.md](scripts/README.md) for detailed usage instructions and individual operation plots.
+
 ## Project Layout
 
 - `include/jazzy/` – public headers (`order_book.hpp`, `traits.hpp`,

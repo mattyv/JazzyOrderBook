@@ -202,13 +202,17 @@ public:
         auto original_volume = order_volume_getter(it->second);
         auto supplied_volume = order_volume_getter(order);
 
+        // Early exit for no-op updates
+        if (tick_strong == original_tick && supplied_volume == original_volume)
+            return;
+
         order_volume_setter(it->second, supplied_volume);
         order_tick_setter(it->second, tick_strong.value());
 
         if (tick_strong == original_tick)
         {
             auto volume_delta = supplied_volume - original_volume;
-            size_type index = tick_to_index(tick_strong);
+            size_type index = tick_to_index(original_tick);
             bids_[index].volume += volume_delta;
             const bool has_volume = bids_[index].volume != 0;
             update_bitsets<true>(has_volume, index);
@@ -227,7 +231,7 @@ public:
 
             size_type new_index = tick_to_index(tick_strong);
             bids_[new_index].volume += supplied_volume;
-            update_bitsets<true>(bids_[new_index].volume != 0, new_index);
+            update_bitsets<true>(true, new_index);
 
             // Update best_bid if needed
             if (tick_strong > best_bid_)
@@ -256,13 +260,17 @@ public:
         auto original_volume = order_volume_getter(it->second);
         auto supplied_volume = order_volume_getter(order);
 
+        // Early exit for no-op updates
+        if (tick_strong == original_tick && supplied_volume == original_volume)
+            return;
+
         order_volume_setter(it->second, supplied_volume);
         order_tick_setter(it->second, tick_strong.value());
 
         if (tick_strong == original_tick)
         {
             auto volume_delta = supplied_volume - original_volume;
-            size_type index = tick_to_index(tick_strong);
+            size_type index = tick_to_index(original_tick);
             asks_[index].volume += volume_delta;
             const bool has_volume = asks_[index].volume != 0;
             update_bitsets<false>(has_volume, index);
@@ -281,7 +289,7 @@ public:
 
             size_type new_index = tick_to_index(tick_strong);
             asks_[new_index].volume += supplied_volume;
-            update_bitsets<false>(asks_[new_index].volume != 0, new_index);
+            update_bitsets<false>(true, new_index);
 
             // Update best_ask if needed
             if (tick_strong < best_ask_)
