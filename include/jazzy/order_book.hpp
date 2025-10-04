@@ -7,6 +7,7 @@
 #include <jazzy/types.hpp>
 
 #include <memory>
+#include <memory_resource>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -15,7 +16,11 @@
 
 namespace jazzy {
 
-template <typename TickType, typename OrderType, typename MarketStats, typename Allocator = std::allocator<OrderType>>
+template <
+    typename TickType,
+    typename OrderType,
+    typename MarketStats,
+    typename Allocator = std::pmr::polymorphic_allocator<OrderType>>
 requires tick<TickType> && order<OrderType> && market_stats<MarketStats> &&
     std::same_as<typename MarketStats::tick_type, TickType> &&
     std::same_as<typename std::allocator_traits<Allocator>::value_type, OrderType> && compatible_allocator<Allocator>
@@ -167,6 +172,11 @@ public:
         asks_.resize(size_);
         orders_.reserve(size_ * 10); // Arbitrary factor to reduce rehashing
     }
+
+    explicit order_book(std::pmr::memory_resource* resource)
+        requires std::same_as<allocator_type, std::pmr::polymorphic_allocator<order_type>>
+        : order_book(allocator_type(resource))
+    {}
 
     ~order_book() = default;
 

@@ -89,8 +89,6 @@ concept compatible_allocator = requires(T alloc) {
     { alloc.deallocate(std::declval<typename std::allocator_traits<T>::value_type*>(), 1) } -> std::same_as<void>;
     requires std::is_copy_constructible_v<T>;
     requires std::is_move_constructible_v<T>;
-    requires std::is_copy_assignable_v<T>;
-    requires std::is_move_assignable_v<T>;
     requires requires { typename std::allocator_traits<T>::template rebind_alloc<int>; };
 };
 

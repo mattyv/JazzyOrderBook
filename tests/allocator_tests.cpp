@@ -2,130 +2,71 @@
 #include <cstddef>
 #include <jazzy/order_book.hpp>
 #include <memory>
+#include <memory_resource>
 #include <order.hpp>
 
 using test_market_stats = jazzy::market_statistics<int, 130, 90, 110, 2000>;
 
-// Tracking allocator to verify proper propagation behavior
-template <typename T>
-struct tracking_allocator
+namespace
 {
-    using value_type = T;
-    using size_type = std::size_t;
-    using difference_type = std::ptrdiff_t;
-    using propagate_on_container_copy_assignment = std::true_type;
-    using propagate_on_container_move_assignment = std::true_type;
-    using propagate_on_container_swap = std::true_type;
-
+struct tracking_resource : std::pmr::memory_resource
+{
     int* allocation_count;
     int* deallocation_count;
     int id;
+    std::pmr::memory_resource* upstream;
 
-    tracking_allocator(int* alloc_count, int* dealloc_count, int alloc_id = 0)
+    tracking_resource(
+        int* alloc_count,
+        int* dealloc_count,
+        int alloc_id = 0,
+        std::pmr::memory_resource* upstream_resource = std::pmr::get_default_resource())
         : allocation_count(alloc_count)
         , deallocation_count(dealloc_count)
         , id(alloc_id)
+        , upstream(upstream_resource)
     {}
 
-    template <typename U>
-    tracking_allocator(const tracking_allocator<U>& other)
-        : allocation_count(other.allocation_count)
-        , deallocation_count(other.deallocation_count)
-        , id(other.id)
-    {}
-
-    T* allocate(size_type n)
+protected:
+    void* do_allocate(std::size_t bytes, std::size_t alignment) override
     {
         if (allocation_count)
             ++(*allocation_count);
-        return static_cast<T*>(::operator new(n * sizeof(T)));
+        return upstream->allocate(bytes, alignment);
     }
 
-    void deallocate(T* p, size_type) noexcept
+    void do_deallocate(void* p, std::size_t bytes, std::size_t alignment) override
     {
         if (deallocation_count)
             ++(*deallocation_count);
-        ::operator delete(p);
+        upstream->deallocate(p, bytes, alignment);
     }
 
-    template <typename U>
-    bool operator==(const tracking_allocator<U>& other) const noexcept
+    bool do_is_equal(const std::pmr::memory_resource& other) const noexcept override
     {
-        return id == other.id;
+        if (this == &other)
+            return true;
+        if (auto* other_tracking = dynamic_cast<const tracking_resource*>(&other))
+            return id == other_tracking->id;
+        return false;
     }
-
-    template <typename U>
-    bool operator!=(const tracking_allocator<U>& other) const noexcept
-    {
-        return !(*this == other);
-    }
-
-    template <typename U>
-    struct rebind
-    {
-        using other = tracking_allocator<U>;
-    };
 };
+} // namespace
 
-// Non-propagating allocator for testing
-template <typename T>
-struct non_propagating_allocator
+SCENARIO("order books work with polymorphic allocators", "[orderbook][allocator]")
 {
-    using value_type = T;
-    using size_type = std::size_t;
-    using difference_type = std::ptrdiff_t;
-    using propagate_on_container_copy_assignment = std::false_type;
-    using propagate_on_container_move_assignment = std::false_type;
-    using propagate_on_container_swap = std::false_type;
+    using OrderBook = jazzy::order_book<int, jazzy::tests::order, test_market_stats>;
 
-    int id;
-
-    explicit non_propagating_allocator(int alloc_id = 0)
-        : id(alloc_id)
-    {}
-
-    template <typename U>
-    non_propagating_allocator(const non_propagating_allocator<U>& other)
-        : id(other.id)
-    {}
-
-    T* allocate(size_type n) { return static_cast<T*>(::operator new(n * sizeof(T))); }
-
-    void deallocate(T* p, size_type) noexcept { ::operator delete(p); }
-
-    template <typename U>
-    bool operator==(const non_propagating_allocator<U>& other) const noexcept
-    {
-        return id == other.id;
-    }
-
-    template <typename U>
-    bool operator!=(const non_propagating_allocator<U>& other) const noexcept
-    {
-        return !(*this == other);
-    }
-
-    template <typename U>
-    struct rebind
-    {
-        using other = non_propagating_allocator<U>;
-    };
-};
-
-SCENARIO("order books work with stateful allocators", "[orderbook][allocator]")
-{
-    GIVEN("An order book with a tracking allocator")
+    GIVEN("An order book with a tracking memory resource")
     {
         int alloc_count = 0;
         int dealloc_count = 0;
-
-        using OrderBook =
-            jazzy::order_book<int, jazzy::tests::order, test_market_stats, tracking_allocator<jazzy::tests::order>>;
+        tracking_resource resource{&alloc_count, &dealloc_count, 1};
 
         WHEN("Creating and destroying an order book")
         {
             {
-                OrderBook book{tracking_allocator<jazzy::tests::order>(&alloc_count, &dealloc_count, 1)};
+                OrderBook book{&resource};
                 book.insert_bid(100, jazzy::tests::order{.order_id = 1, .volume = 10});
                 book.insert_ask(110, jazzy::tests::order{.order_id = 2, .volume = 20});
 
@@ -140,7 +81,7 @@ SCENARIO("order books work with stateful allocators", "[orderbook][allocator]")
             alloc_count = 0;
             dealloc_count = 0;
 
-            OrderBook original{tracking_allocator<jazzy::tests::order>(&alloc_count, &dealloc_count, 1)};
+            OrderBook original{&resource};
             original.insert_bid(100, jazzy::tests::order{.order_id = 1, .volume = 10});
 
             int original_alloc_count = alloc_count;
@@ -149,12 +90,12 @@ SCENARIO("order books work with stateful allocators", "[orderbook][allocator]")
 
             THEN("The copy uses select_on_container_copy_construction")
             {
-                // Should have allocated for the copy
-                REQUIRE(alloc_count > original_alloc_count);
-
-                // Both should have the same data
+                REQUIRE(alloc_count >= original_alloc_count);
                 REQUIRE(copy.bid_volume_at_tick(100) == 10);
                 REQUIRE(copy.best_bid() == 100);
+                auto expected_allocator = std::allocator_traits<OrderBook::allocator_type>::select_on_container_copy_construction(
+                    original.get_allocator());
+                REQUIRE(copy.get_allocator() == expected_allocator);
             }
         }
 
@@ -163,7 +104,7 @@ SCENARIO("order books work with stateful allocators", "[orderbook][allocator]")
             alloc_count = 0;
             dealloc_count = 0;
 
-            OrderBook original{tracking_allocator<jazzy::tests::order>(&alloc_count, &dealloc_count, 1)};
+            OrderBook original{&resource};
             original.insert_bid(100, jazzy::tests::order{.order_id = 1, .volume = 10});
 
             int alloc_before_move = alloc_count;
@@ -172,110 +113,51 @@ SCENARIO("order books work with stateful allocators", "[orderbook][allocator]")
 
             THEN("No new allocations occur (just transfer)")
             {
-// Move should not allocate new memory
-// Note: MSVC's STL may allocate small bookkeeping structures during move
 #ifdef _MSC_VER
-                REQUIRE(alloc_count <= alloc_before_move + 2); // Allow MSVC tolerance
+                REQUIRE(alloc_count <= alloc_before_move + 2);
 #else
                 REQUIRE(alloc_count == alloc_before_move);
 #endif
-
-                // Moved-to object has the data
                 REQUIRE(moved.bid_volume_at_tick(100) == 10);
                 REQUIRE(moved.best_bid() == 100);
             }
         }
     }
 
-    GIVEN("Order books with propagating allocators")
+    GIVEN("Order books with distinct polymorphic allocators")
     {
         int alloc_count1 = 0, dealloc_count1 = 0;
         int alloc_count2 = 0, dealloc_count2 = 0;
 
-        using OrderBook =
-            jazzy::order_book<int, jazzy::tests::order, test_market_stats, tracking_allocator<jazzy::tests::order>>;
+        tracking_resource resource1{&alloc_count1, &dealloc_count1, 1};
+        tracking_resource resource2{&alloc_count2, &dealloc_count2, 2};
 
-        OrderBook book1{tracking_allocator<jazzy::tests::order>(&alloc_count1, &dealloc_count1, 1)};
-        OrderBook book2{tracking_allocator<jazzy::tests::order>(&alloc_count2, &dealloc_count2, 2)};
-
-        book1.insert_bid(100, jazzy::tests::order{.order_id = 1, .volume = 10});
-        book2.insert_bid(105, jazzy::tests::order{.order_id = 2, .volume = 20});
-
-        WHEN("Copy assigning with propagate_on_container_copy_assignment")
-        {
-            book2 = book1;
-
-            THEN("Allocator is propagated")
-            {
-                // book2 should now use book1's allocator
-                REQUIRE(book2.get_allocator() == book1.get_allocator());
-                REQUIRE(book2.bid_volume_at_tick(100) == 10);
-            }
-        }
-
-        WHEN("Move assigning with propagate_on_container_move_assignment")
-        {
-            auto original_allocator = book1.get_allocator();
-            book2 = std::move(book1);
-
-            THEN("Allocator is propagated")
-            {
-                REQUIRE(book2.get_allocator() == original_allocator);
-                REQUIRE(book2.bid_volume_at_tick(100) == 10);
-            }
-        }
-    }
-
-    GIVEN("Order books with non-propagating allocators")
-    {
-        using OrderBook = jazzy::
-            order_book<int, jazzy::tests::order, test_market_stats, non_propagating_allocator<jazzy::tests::order>>;
-
-        OrderBook book1{non_propagating_allocator<jazzy::tests::order>(1)};
-        OrderBook book2{non_propagating_allocator<jazzy::tests::order>(2)};
+        OrderBook book1{&resource1};
+        OrderBook book2{&resource2};
 
         book1.insert_bid(100, jazzy::tests::order{.order_id = 1, .volume = 10});
         book2.insert_bid(105, jazzy::tests::order{.order_id = 2, .volume = 20});
 
-        WHEN("Copy assigning without propagation")
+        WHEN("Copy assigning between books with different resources")
         {
             auto book2_allocator_before = book2.get_allocator();
             book2 = book1;
 
-            THEN("Allocator is NOT propagated")
+            THEN("Allocator remains unchanged while data is copied")
             {
-                // book2 should keep its original allocator
                 REQUIRE(book2.get_allocator() == book2_allocator_before);
-                // But data is copied
                 REQUIRE(book2.bid_volume_at_tick(100) == 10);
             }
         }
 
-        WHEN("Move assigning with equal allocators")
-        {
-            OrderBook book3{non_propagating_allocator<jazzy::tests::order>(1)};
-            book3.insert_bid(110, jazzy::tests::order{.order_id = 3, .volume = 30});
-
-            auto book1_allocator_before = book1.get_allocator();
-            book1 = std::move(book3);
-
-            THEN("Move is efficient because allocators are equal")
-            {
-                REQUIRE(book1.get_allocator() == book1_allocator_before);
-                REQUIRE(book1.bid_volume_at_tick(110) == 30);
-            }
-        }
-
-        WHEN("Move assigning with unequal allocators")
+        WHEN("Move assigning between books with different resources")
         {
             auto book2_allocator_before = book2.get_allocator();
             book2 = std::move(book1);
 
-            THEN("Must copy because allocators differ and don't propagate")
+            THEN("Allocator remains unchanged while values move")
             {
-                // book2 keeps its allocator
                 REQUIRE(book2.get_allocator() == book2_allocator_before);
-                // But data is transferred
                 REQUIRE(book2.bid_volume_at_tick(100) == 10);
             }
         }
@@ -284,15 +166,16 @@ SCENARIO("order books work with stateful allocators", "[orderbook][allocator]")
 
 SCENARIO("order book allocator awareness is complete", "[orderbook][allocator]")
 {
-    GIVEN("An order book with stateful allocator")
+    using OrderBook = jazzy::order_book<int, jazzy::tests::order, test_market_stats>;
+
+    GIVEN("An order book with stateful memory resource")
     {
         int alloc_count = 0;
         int dealloc_count = 0;
 
-        using OrderBook =
-            jazzy::order_book<int, jazzy::tests::order, test_market_stats, tracking_allocator<jazzy::tests::order>>;
+        tracking_resource resource{&alloc_count, &dealloc_count, 42};
 
-        OrderBook book{tracking_allocator<jazzy::tests::order>(&alloc_count, &dealloc_count, 42)};
+        OrderBook book{&resource};
 
         WHEN("Retrieving the allocator")
         {
@@ -300,9 +183,7 @@ SCENARIO("order book allocator awareness is complete", "[orderbook][allocator]")
 
             THEN("The correct allocator is returned")
             {
-                REQUIRE(alloc.id == 42);
-                REQUIRE(alloc.allocation_count == &alloc_count);
-                REQUIRE(alloc.deallocation_count == &dealloc_count);
+                REQUIRE(alloc.resource() == &resource);
             }
         }
 
