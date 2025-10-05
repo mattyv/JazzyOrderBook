@@ -1,7 +1,6 @@
 #pragma once
 #include <concepts>
 #include <cstddef>
-#include <memory>
 
 namespace jazzy {
 namespace detail {
@@ -80,18 +79,6 @@ concept order = requires(T const& order) {
         { v1 + v2 } -> std::same_as<order_volume_type<T>>;
     };
     requires tick<order_tick_type<T>>;
-};
-
-template <typename T>
-concept compatible_allocator = requires(T alloc) {
-    typename std::allocator_traits<T>::value_type;
-    { alloc.allocate(1) } -> std::same_as<typename std::allocator_traits<T>::value_type*>;
-    { alloc.deallocate(std::declval<typename std::allocator_traits<T>::value_type*>(), 1) } -> std::same_as<void>;
-    requires std::is_copy_constructible_v<T>;
-    requires std::is_move_constructible_v<T>;
-    requires std::is_copy_assignable_v<T>;
-    requires std::is_move_assignable_v<T>;
-    requires requires { typename std::allocator_traits<T>::template rebind_alloc<int>; };
 };
 
 constexpr detail::order_id_getter order_id_getter;

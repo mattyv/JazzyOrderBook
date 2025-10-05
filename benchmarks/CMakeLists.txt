@@ -15,6 +15,10 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
         -Werror
         -Wconversion -Wsign-conversion
     )
+    if(ENABLE_UBSAN)
+        target_compile_options(${PROJECT_NAME} PRIVATE -fno-sanitize=integer)
+        target_link_options(${PROJECT_NAME} PRIVATE -fno-sanitize=integer)
+    endif()
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
     target_compile_options(${PROJECT_NAME} PRIVATE /WX)
 endif()
@@ -44,6 +48,10 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
         -Werror
         -Wconversion -Wsign-conversion
     )
+    if(ENABLE_UBSAN)
+        target_compile_options(${PROJECT_NAME}_portable PRIVATE -fno-sanitize=integer)
+        target_link_options(${PROJECT_NAME}_portable PRIVATE -fno-sanitize=integer)
+    endif()
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
     target_compile_options(${PROJECT_NAME}_portable PRIVATE /WX)
 endif()
