@@ -1,6 +1,6 @@
 #pragma once
 
-#include <deque>
+#include <list>
 #include <jazzy/traits.hpp>
 #include <memory_resource>
 
@@ -28,7 +28,7 @@ struct fifo_level_storage
 {
     using order_type = OrderType;
     using id_type = order_id_type<order_type>;
-    using order_queue = std::pmr::deque<id_type>;
+    using order_queue = std::pmr::list<id_type>;
     using queue_iterator = typename order_queue::iterator;
 
     order_queue orders;

@@ -4,9 +4,11 @@ project(jazzy)
 
 enable_testing()
 
-# Sanitizer options
-option(ENABLE_ASAN "Enable Address Sanitizer" OFF)
-option(ENABLE_UBSAN "Enable Undefined Behavior Sanitizer" OFF)
+# Sanitizer options (separate controls for tests and benchmarks)
+option(ENABLE_ASAN_TESTS "Enable Address Sanitizer for tests" ON)
+option(ENABLE_UBSAN_TESTS "Enable Undefined Behavior Sanitizer for tests" ON)
+option(ENABLE_ASAN_BENCHMARKS "Enable Address Sanitizer for benchmarks" OFF)
+option(ENABLE_UBSAN_BENCHMARKS "Enable Undefined Behavior Sanitizer for benchmarks" OFF)
 
 add_library(${PROJECT_NAME} INTERFACE)
 add_library(${PROJECT_NAME}::${PROJECT_NAME} ALIAS ${PROJECT_NAME})
@@ -28,21 +30,6 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
     target_compile_options(${PROJECT_NAME} INTERFACE
         /W4 /w14062 /w14165
     )
-endif()
-
-# Sanitizer flags
-if(ENABLE_ASAN)
-    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
-        add_compile_options(-fsanitize=address -fno-omit-frame-pointer)
-        add_link_options(-fsanitize=address)
-    endif()
-endif()
-
-if(ENABLE_UBSAN)
-    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
-        add_compile_options(-fsanitize=undefined,integer,nullability,implicit-conversion,local-bounds,float-divide-by-zero -fno-sanitize-recover=all)
-        add_link_options(-fsanitize=undefined,integer,nullability,implicit-conversion,local-bounds,float-divide-by-zero)
-    endif()
 endif()
 
 add_subdirectory(external)

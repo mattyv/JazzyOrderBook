@@ -27,6 +27,21 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
     target_compile_options(${PROJECT_NAME} PRIVATE /WX)
 endif()
 
+# Sanitizers for tests (enabled by default)
+if(ENABLE_ASAN_TESTS)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
+        target_compile_options(${PROJECT_NAME} PRIVATE -fsanitize=address -fno-omit-frame-pointer)
+        target_link_options(${PROJECT_NAME} PRIVATE -fsanitize=address)
+    endif()
+endif()
+
+if(ENABLE_UBSAN_TESTS)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
+        target_compile_options(${PROJECT_NAME} PRIVATE -fsanitize=undefined,integer,nullability,implicit-conversion,local-bounds,float-divide-by-zero -fno-sanitize-recover=all)
+        target_link_options(${PROJECT_NAME} PRIVATE -fsanitize=undefined,integer,nullability,implicit-conversion,local-bounds,float-divide-by-zero)
+    endif()
+endif()
+
 add_test(NAME unit_tests COMMAND ${PROJECT_NAME})
 
 # Add BMI2 support for x86-64 platforms
