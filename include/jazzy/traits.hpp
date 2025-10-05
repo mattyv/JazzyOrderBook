@@ -1,7 +1,6 @@
 #pragma once
 #include <concepts>
 #include <cstddef>
-#include <memory>
 
 namespace jazzy {
 namespace detail {

@@ -4,6 +4,7 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <memory_resource>
 #include <stdexcept>
 #include <utility>
 
@@ -187,6 +188,10 @@ class level_bitmap
 
 public:
     constexpr level_bitmap() = default;
+    level_bitmap(const level_bitmap&) = default;
+    level_bitmap(level_bitmap&&) noexcept = default;
+    level_bitmap& operator=(const level_bitmap&) = default;
+    level_bitmap& operator=(level_bitmap&&) noexcept = default;
 
     [[nodiscard]] constexpr std::size_t size() const noexcept { return N; }
 
@@ -328,6 +333,10 @@ class level_bitmap<N, true>
 
 public:
     constexpr level_bitmap() = default;
+    level_bitmap(const level_bitmap&) = default;
+    level_bitmap(level_bitmap&&) noexcept = default;
+    level_bitmap& operator=(const level_bitmap&) = default;
+    level_bitmap& operator=(level_bitmap&&) noexcept = default;
 
     [[nodiscard]] constexpr std::size_t size() const noexcept { return N; }
 
