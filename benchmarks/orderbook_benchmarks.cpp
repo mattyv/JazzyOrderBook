@@ -27,16 +27,18 @@ jazzy::tests::order generate_random_order(int order_id)
 
 // Helper to add order to book (randomly bid or ask)
 template <typename BookType>
-void add_random_order(BookType& book, const jazzy::tests::order& order)
+bool add_random_order(BookType& book, const jazzy::tests::order& order)
 {
     std::uniform_int_distribution<int> side_dist(0, 1);
     if (side_dist(gen) == 0)
     {
         book.insert_bid(order.tick, order);
+        return true;
     }
     else
     {
         book.insert_ask(order.tick, order);
+        return false;
     }
 }
 
@@ -45,16 +47,23 @@ static void BM_JazzyOrderBook_AddOrders(benchmark::State& state)
 {
     for (auto _ : state)
     {
-        VectorOrderBook book{};
-
-        // Add orders equal to the benchmark parameter
-        for (int i = 0; i < state.range(0); ++i)
+        state.PauseTiming();
         {
-            auto order = generate_random_order(i);
-            add_random_order(book, order);
-        }
+            VectorOrderBook book{};
+            state.ResumeTiming();
 
-        benchmark::DoNotOptimize(book);
+            // Add orders equal to the benchmark parameter
+            for (int i = 0; i < state.range(0); ++i)
+            {
+            auto order = generate_random_order(i);
+            (void)add_random_order(book, order);
+            }
+
+            benchmark::DoNotOptimize(book);
+
+            state.PauseTiming();
+        }
+        state.ResumeTiming();
     }
     state.SetComplexityN(state.range(0));
 }
@@ -63,16 +72,23 @@ static void BM_MapOrderBook_AddOrders(benchmark::State& state)
 {
     for (auto _ : state)
     {
-        MapOrderBook book{};
-
-        // Add orders equal to the benchmark parameter
-        for (int i = 0; i < state.range(0); ++i)
+        state.PauseTiming();
         {
-            auto order = generate_random_order(i);
-            add_random_order(book, order);
-        }
+            MapOrderBook book{};
+            state.ResumeTiming();
 
-        benchmark::DoNotOptimize(book);
+            // Add orders equal to the benchmark parameter
+            for (int i = 0; i < state.range(0); ++i)
+            {
+            auto order = generate_random_order(i);
+            (void)add_random_order(book, order);
+            }
+
+            benchmark::DoNotOptimize(book);
+
+            state.PauseTiming();
+        }
+        state.ResumeTiming();
     }
     state.SetComplexityN(state.range(0));
 }
@@ -88,7 +104,7 @@ static void BM_JazzyOrderBook_VolumeLookup(benchmark::State& state)
     {
         auto order = generate_random_order(i);
         ticks.push_back(order.tick);
-        add_random_order(book, order);
+        (void)add_random_order(book, order);
     }
 
     // Shuffle ticks for random access pattern
@@ -118,7 +134,7 @@ static void BM_MapOrderBook_VolumeLookup(benchmark::State& state)
     {
         auto order = generate_random_order(i);
         ticks.push_back(order.tick);
-        add_random_order(book, order);
+        (void)add_random_order(book, order);
     }
 
     // Shuffle ticks for random access pattern
@@ -143,65 +159,72 @@ static void BM_JazzyOrderBook_MixedOps(benchmark::State& state)
 {
     for (auto _ : state)
     {
-        VectorOrderBook book{};
-        std::vector<jazzy::tests::order> active_orders;
-
-        const std::int64_t num_ops = state.range(0);
-        std::uniform_int_distribution<int> op_dist(0, 2); // 0=add, 1=update, 2=remove
-
-        for (std::int64_t i = 0; i < num_ops; ++i)
+        state.PauseTiming();
         {
-            int op = op_dist(gen);
+            VectorOrderBook book{};
+            std::vector<jazzy::tests::order> active_orders;
+            state.ResumeTiming();
 
-            if (op == 0 || active_orders.empty())
+            const std::int64_t num_ops = state.range(0);
+            std::uniform_int_distribution<int> op_dist(0, 2); // 0=add, 1=update, 2=remove
+
+            for (std::int64_t i = 0; i < num_ops; ++i)
             {
-                // Add operation
-                auto order = generate_random_order(static_cast<int>(i));
-                active_orders.push_back(order);
-                add_random_order(book, order);
+                int op = op_dist(gen);
+
+                if (op == 0 || active_orders.empty())
+                {
+                    // Add operation
+                    auto order = generate_random_order(static_cast<int>(i));
+                    active_orders.push_back(order);
+                    (void)add_random_order(book, order);
+                }
+                else if (op == 1 && !active_orders.empty())
+                {
+                    // Update operation - change volume
+                    std::uniform_int_distribution<size_t> idx_dist(0, active_orders.size() - 1);
+                    size_t idx = idx_dist(gen);
+                    auto& order = active_orders[idx];
+
+                    std::uniform_int_distribution<int> new_volume_dist(1, 500);
+                    order.volume = new_volume_dist(gen);
+
+                    std::uniform_int_distribution<int> side_dist(0, 1);
+                    if (side_dist(gen) == 0)
+                    {
+                        book.update_bid(order.tick, order);
+                    }
+                    else
+                    {
+                        book.update_ask(order.tick, order);
+                    }
+                }
+                else if (op == 2 && !active_orders.empty())
+                {
+                    // Remove operation
+                    std::uniform_int_distribution<size_t> idx_dist(0, active_orders.size() - 1);
+                    size_t idx = idx_dist(gen);
+                    auto order = active_orders[idx];
+
+                    std::uniform_int_distribution<int> side_dist(0, 1);
+                    if (side_dist(gen) == 0)
+                    {
+                        book.remove_bid(order.tick, order);
+                    }
+                    else
+                    {
+                        book.remove_ask(order.tick, order);
+                    }
+
+                    active_orders.erase(active_orders.begin() + static_cast<std::ptrdiff_t>(idx));
+                }
             }
-            else if (op == 1 && !active_orders.empty())
-            {
-                // Update operation - change volume
-                std::uniform_int_distribution<size_t> idx_dist(0, active_orders.size() - 1);
-                size_t idx = idx_dist(gen);
-                auto& order = active_orders[idx];
 
-                std::uniform_int_distribution<int> new_volume_dist(1, 500);
-                order.volume = new_volume_dist(gen);
+            benchmark::DoNotOptimize(book);
 
-                std::uniform_int_distribution<int> side_dist(0, 1);
-                if (side_dist(gen) == 0)
-                {
-                    book.update_bid(order.tick, order);
-                }
-                else
-                {
-                    book.update_ask(order.tick, order);
-                }
-            }
-            else if (op == 2 && !active_orders.empty())
-            {
-                // Remove operation
-                std::uniform_int_distribution<size_t> idx_dist(0, active_orders.size() - 1);
-                size_t idx = idx_dist(gen);
-                auto order = active_orders[idx];
-
-                std::uniform_int_distribution<int> side_dist(0, 1);
-                if (side_dist(gen) == 0)
-                {
-                    book.remove_bid(order.tick, order);
-                }
-                else
-                {
-                    book.remove_ask(order.tick, order);
-                }
-
-                active_orders.erase(active_orders.begin() + static_cast<std::ptrdiff_t>(idx));
-            }
+            state.PauseTiming();
         }
-
-        benchmark::DoNotOptimize(book);
+        state.ResumeTiming();
     }
     state.SetComplexityN(state.range(0));
 }
@@ -210,65 +233,72 @@ static void BM_MapOrderBook_MixedOps(benchmark::State& state)
 {
     for (auto _ : state)
     {
-        MapOrderBook book{};
-        std::vector<jazzy::tests::order> active_orders;
-
-        const std::int64_t num_ops = state.range(0);
-        std::uniform_int_distribution<int> op_dist(0, 2); // 0=add, 1=update, 2=remove
-
-        for (std::int64_t i = 0; i < num_ops; ++i)
+        state.PauseTiming();
         {
-            int op = op_dist(gen);
+            MapOrderBook book{};
+            std::vector<jazzy::tests::order> active_orders;
+            state.ResumeTiming();
 
-            if (op == 0 || active_orders.empty())
+            const std::int64_t num_ops = state.range(0);
+            std::uniform_int_distribution<int> op_dist(0, 2); // 0=add, 1=update, 2=remove
+
+            for (std::int64_t i = 0; i < num_ops; ++i)
             {
-                // Add operation
-                auto order = generate_random_order(static_cast<int>(i));
-                active_orders.push_back(order);
-                add_random_order(book, order);
+                int op = op_dist(gen);
+
+                if (op == 0 || active_orders.empty())
+                {
+                    // Add operation
+                    auto order = generate_random_order(static_cast<int>(i));
+                    active_orders.push_back(order);
+                    (void)add_random_order(book, order);
+                }
+                else if (op == 1 && !active_orders.empty())
+                {
+                    // Update operation - change volume
+                    std::uniform_int_distribution<size_t> idx_dist(0, active_orders.size() - 1);
+                    size_t idx = idx_dist(gen);
+                    auto& order = active_orders[idx];
+
+                    std::uniform_int_distribution<int> new_volume_dist(1, 500);
+                    order.volume = new_volume_dist(gen);
+
+                    std::uniform_int_distribution<int> side_dist(0, 1);
+                    if (side_dist(gen) == 0)
+                    {
+                        book.update_bid(order.tick, order);
+                    }
+                    else
+                    {
+                        book.update_ask(order.tick, order);
+                    }
+                }
+                else if (op == 2 && !active_orders.empty())
+                {
+                    // Remove operation
+                    std::uniform_int_distribution<size_t> idx_dist(0, active_orders.size() - 1);
+                    size_t idx = idx_dist(gen);
+                    auto order = active_orders[idx];
+
+                    std::uniform_int_distribution<int> side_dist(0, 1);
+                    if (side_dist(gen) == 0)
+                    {
+                        book.remove_bid(order.tick, order);
+                    }
+                    else
+                    {
+                        book.remove_ask(order.tick, order);
+                    }
+
+                    active_orders.erase(active_orders.begin() + static_cast<std::ptrdiff_t>(idx));
+                }
             }
-            else if (op == 1 && !active_orders.empty())
-            {
-                // Update operation - change volume
-                std::uniform_int_distribution<size_t> idx_dist(0, active_orders.size() - 1);
-                size_t idx = idx_dist(gen);
-                auto& order = active_orders[idx];
 
-                std::uniform_int_distribution<int> new_volume_dist(1, 500);
-                order.volume = new_volume_dist(gen);
+            benchmark::DoNotOptimize(book);
 
-                std::uniform_int_distribution<int> side_dist(0, 1);
-                if (side_dist(gen) == 0)
-                {
-                    book.update_bid(order.tick, order);
-                }
-                else
-                {
-                    book.update_ask(order.tick, order);
-                }
-            }
-            else if (op == 2 && !active_orders.empty())
-            {
-                // Remove operation
-                std::uniform_int_distribution<size_t> idx_dist(0, active_orders.size() - 1);
-                size_t idx = idx_dist(gen);
-                auto order = active_orders[idx];
-
-                std::uniform_int_distribution<int> side_dist(0, 1);
-                if (side_dist(gen) == 0)
-                {
-                    book.remove_bid(order.tick, order);
-                }
-                else
-                {
-                    book.remove_ask(order.tick, order);
-                }
-
-                active_orders.erase(active_orders.begin() + static_cast<std::ptrdiff_t>(idx));
-            }
+            state.PauseTiming();
         }
-
-        benchmark::DoNotOptimize(book);
+        state.ResumeTiming();
     }
     state.SetComplexityN(state.range(0));
 }
@@ -292,7 +322,7 @@ static void BM_JazzyOrderBook_UpdateOrders(benchmark::State& state)
     {
         jazzy::tests::order order{i, volume_dist(gen), hot_tick_dist(gen)};
         hot_orders.push_back(order);
-        add_random_order(book, order);
+        (void)add_random_order(book, order);
     }
 
     // Pre-populate cold orders: spread across full range
@@ -301,7 +331,7 @@ static void BM_JazzyOrderBook_UpdateOrders(benchmark::State& state)
     {
         jazzy::tests::order order{static_cast<int>(i), volume_dist(gen), cold_tick_dist(gen)};
         cold_orders.push_back(order);
-        add_random_order(book, order);
+        (void)add_random_order(book, order);
     }
 
     std::uniform_int_distribution<int> update_dist(0, 99); // 0-99 for percentage
@@ -351,7 +381,7 @@ static void BM_MapOrderBook_UpdateOrders(benchmark::State& state)
     {
         jazzy::tests::order order{i, volume_dist(gen), hot_tick_dist(gen)};
         hot_orders.push_back(order);
-        add_random_order(book, order);
+        (void)add_random_order(book, order);
     }
 
     // Pre-populate cold orders: spread across full range
@@ -360,7 +390,7 @@ static void BM_MapOrderBook_UpdateOrders(benchmark::State& state)
     {
         jazzy::tests::order order{static_cast<int>(i), volume_dist(gen), cold_tick_dist(gen)};
         cold_orders.push_back(order);
-        add_random_order(book, order);
+        (void)add_random_order(book, order);
     }
 
     std::uniform_int_distribution<int> update_dist(0, 99); // 0-99 for percentage
@@ -397,31 +427,38 @@ static void BM_JazzyOrderBook_DeleteOrders(benchmark::State& state)
 {
     for (auto _ : state)
     {
-        VectorOrderBook book{};
-        std::vector<jazzy::tests::order> orders;
-
-        // Pre-populate the order book
-        for (int i = 0; i < state.range(0); ++i)
+        state.PauseTiming();
         {
-            auto order = generate_random_order(i);
-            orders.push_back(order);
-            add_random_order(book, order);
-        }
+            VectorOrderBook book{};
+            std::vector<jazzy::tests::order> orders;
+            state.ResumeTiming();
 
-        // Time the deletion of all orders
-        for (const auto& order : orders)
-        {
-            std::uniform_int_distribution<int> side_dist(0, 1);
-            if (side_dist(gen) == 0)
+            // Pre-populate the order book
+            for (int i = 0; i < state.range(0); ++i)
             {
-                book.remove_bid(order.tick, order);
+                auto order = generate_random_order(i);
+                orders.push_back(order);
+                (void)add_random_order(book, order);
             }
-            else
+
+            // Time the deletion of all orders
+            for (const auto& order : orders)
             {
-                book.remove_ask(order.tick, order);
+                std::uniform_int_distribution<int> side_dist(0, 1);
+                if (side_dist(gen) == 0)
+                {
+                    book.remove_bid(order.tick, order);
+                }
+                else
+                {
+                    book.remove_ask(order.tick, order);
+                }
             }
+            benchmark::DoNotOptimize(book);
+
+            state.PauseTiming();
         }
-        benchmark::DoNotOptimize(book);
+        state.ResumeTiming();
     }
     state.SetComplexityN(state.range(0));
 }
@@ -430,31 +467,38 @@ static void BM_MapOrderBook_DeleteOrders(benchmark::State& state)
 {
     for (auto _ : state)
     {
-        MapOrderBook book{};
-        std::vector<jazzy::tests::order> orders;
-
-        // Pre-populate the order book
-        for (int i = 0; i < state.range(0); ++i)
+        state.PauseTiming();
         {
-            auto order = generate_random_order(i);
-            orders.push_back(order);
-            add_random_order(book, order);
-        }
+            MapOrderBook book{};
+            std::vector<jazzy::tests::order> orders;
+            state.ResumeTiming();
 
-        // Time the deletion of all orders
-        for (const auto& order : orders)
-        {
-            std::uniform_int_distribution<int> side_dist(0, 1);
-            if (side_dist(gen) == 0)
+            // Pre-populate the order book
+            for (int i = 0; i < state.range(0); ++i)
             {
-                book.remove_bid(order.tick, order);
+                auto order = generate_random_order(i);
+                orders.push_back(order);
+                (void)add_random_order(book, order);
             }
-            else
+
+            // Time the deletion of all orders
+            for (const auto& order : orders)
             {
-                book.remove_ask(order.tick, order);
+                std::uniform_int_distribution<int> side_dist(0, 1);
+                if (side_dist(gen) == 0)
+                {
+                    book.remove_bid(order.tick, order);
+                }
+                else
+                {
+                    book.remove_ask(order.tick, order);
+                }
             }
+            benchmark::DoNotOptimize(book);
+
+            state.PauseTiming();
         }
-        benchmark::DoNotOptimize(book);
+        state.ResumeTiming();
     }
     state.SetComplexityN(state.range(0));
 }
@@ -468,7 +512,7 @@ static void BM_JazzyOrderBook_GetOrderAtLevel(benchmark::State& state)
     for (int i = 0; i < state.range(0); ++i)
     {
         auto order = generate_random_order(i);
-        add_random_order(book, order);
+        (void)add_random_order(book, order);
     }
 
     for (auto _ : state)
@@ -494,7 +538,7 @@ static void BM_MapOrderBook_GetOrderAtLevel(benchmark::State& state)
     for (int i = 0; i < state.range(0); ++i)
     {
         auto order = generate_random_order(i);
-        add_random_order(book, order);
+        (void)add_random_order(book, order);
     }
 
     for (auto _ : state)
@@ -539,13 +583,21 @@ static void BM_AggregateOrderBook_AddOrders(benchmark::State& state)
 {
     for (auto _ : state)
     {
-        VectorOrderBook book{};
-        for (int i = 0; i < state.range(0); ++i)
+        state.PauseTiming();
         {
-            auto order = generate_random_order(i);
-            add_random_order(book, order);
+            VectorOrderBook book{};
+            state.ResumeTiming();
+
+            for (int i = 0; i < state.range(0); ++i)
+            {
+                auto order = generate_random_order(i);
+                (void)add_random_order(book, order);
+            }
+            benchmark::DoNotOptimize(book);
+
+            state.PauseTiming();
         }
-        benchmark::DoNotOptimize(book);
+        state.ResumeTiming();
     }
     state.SetComplexityN(state.range(0));
 }
@@ -554,13 +606,21 @@ static void BM_FifoOrderBook_AddOrders(benchmark::State& state)
 {
     for (auto _ : state)
     {
-        FifoOrderBook book{};
-        for (int i = 0; i < state.range(0); ++i)
+        state.PauseTiming();
         {
-            auto order = generate_random_order(i);
-            add_random_order(book, order);
+            FifoOrderBook book{};
+            state.ResumeTiming();
+
+            for (int i = 0; i < state.range(0); ++i)
+            {
+                auto order = generate_random_order(i);
+                (void)add_random_order(book, order);
+            }
+            benchmark::DoNotOptimize(book);
+
+            state.PauseTiming();
         }
-        benchmark::DoNotOptimize(book);
+        state.ResumeTiming();
     }
     state.SetComplexityN(state.range(0));
 }
@@ -569,26 +629,34 @@ static void BM_AggregateOrderBook_UpdateOrders(benchmark::State& state)
 {
     for (auto _ : state)
     {
-        VectorOrderBook book{};
-        std::vector<jazzy::tests::order> orders;
-        for (int i = 0; i < state.range(0); ++i)
+        state.PauseTiming();
         {
-            auto order = generate_random_order(i);
-            orders.push_back(order);
-            add_random_order(book, order);
-        }
+            VectorOrderBook book{};
+            std::vector<jazzy::tests::order> orders;
+            state.ResumeTiming();
 
-        std::uniform_int_distribution<int> volume_dist(1, 1000);
-        for (auto& order : orders)
-        {
-            order.volume = volume_dist(gen);
-            std::uniform_int_distribution<int> side_dist(0, 1);
-            if (side_dist(gen) == 0)
-                book.update_bid(order.tick, order);
-            else
-                book.update_ask(order.tick, order);
+            for (int i = 0; i < state.range(0); ++i)
+            {
+                auto order = generate_random_order(i);
+                orders.push_back(order);
+                (void)add_random_order(book, order);
+            }
+
+            std::uniform_int_distribution<int> volume_dist(1, 1000);
+            for (auto& order : orders)
+            {
+                order.volume = volume_dist(gen);
+                std::uniform_int_distribution<int> side_dist(0, 1);
+                if (side_dist(gen) == 0)
+                    book.update_bid(order.tick, order);
+                else
+                    book.update_ask(order.tick, order);
+            }
+            benchmark::DoNotOptimize(book);
+
+            state.PauseTiming();
         }
-        benchmark::DoNotOptimize(book);
+        state.ResumeTiming();
     }
     state.SetComplexityN(state.range(0));
 }
@@ -597,26 +665,35 @@ static void BM_FifoOrderBook_UpdateOrders(benchmark::State& state)
 {
     for (auto _ : state)
     {
-        FifoOrderBook book{};
-        std::vector<jazzy::tests::order> orders;
-        for (int i = 0; i < state.range(0); ++i)
+        state.PauseTiming();
         {
-            auto order = generate_random_order(i);
-            orders.push_back(order);
-            add_random_order(book, order);
-        }
+            FifoOrderBook book{};
+            std::vector<std::pair<jazzy::tests::order, bool>> orders; // pair: (order, is_bid)
+            state.ResumeTiming();
 
-        std::uniform_int_distribution<int> volume_dist(1, 1000);
-        for (auto& order : orders)
-        {
-            order.volume = volume_dist(gen);
-            std::uniform_int_distribution<int> side_dist(0, 1);
-            if (side_dist(gen) == 0)
-                book.update_bid(order.tick, order);
-            else
-                book.update_ask(order.tick, order);
+            for (int i = 0; i < state.range(0); ++i)
+            {
+                auto order = generate_random_order(i);
+                bool is_bid = add_random_order(book, order);
+                orders.emplace_back(order, is_bid);
+            }
+
+            std::uniform_int_distribution<int> volume_dist(1, 1000);
+            for (auto& [order, is_bid] : orders)
+            {
+                auto current = book.get_order(order.order_id);
+                current.volume = volume_dist(gen);
+                if (is_bid)
+                    book.update_bid(current.tick, current);
+                else
+                    book.update_ask(current.tick, current);
+                order = current;
+            }
+            benchmark::DoNotOptimize(book);
+
+            state.PauseTiming();
         }
-        benchmark::DoNotOptimize(book);
+        state.ResumeTiming();
     }
     state.SetComplexityN(state.range(0));
 }
@@ -625,47 +702,55 @@ static void BM_AggregateOrderBook_MixedOps(benchmark::State& state)
 {
     for (auto _ : state)
     {
-        VectorOrderBook book{};
-        std::vector<jazzy::tests::order> active_orders;
-        const std::int64_t num_ops = state.range(0);
-        std::uniform_int_distribution<int> op_dist(0, 2);
-
-        for (std::int64_t i = 0; i < num_ops; ++i)
+        state.PauseTiming();
         {
-            int op = op_dist(gen);
-            if (op == 0 || active_orders.empty())
+            VectorOrderBook book{};
+            std::vector<jazzy::tests::order> active_orders;
+            state.ResumeTiming();
+
+            const std::int64_t num_ops = state.range(0);
+            std::uniform_int_distribution<int> op_dist(0, 2);
+
+            for (std::int64_t i = 0; i < num_ops; ++i)
             {
-                auto order = generate_random_order(static_cast<int>(i));
-                active_orders.push_back(order);
-                add_random_order(book, order);
+                int op = op_dist(gen);
+                if (op == 0 || active_orders.empty())
+                {
+                    auto order = generate_random_order(static_cast<int>(i));
+                    active_orders.push_back(order);
+                    (void)add_random_order(book, order);
+                }
+                else if (op == 1 && !active_orders.empty())
+                {
+                    std::uniform_int_distribution<size_t> idx_dist(0, active_orders.size() - 1);
+                    size_t idx = idx_dist(gen);
+                    auto& order = active_orders[idx];
+                    std::uniform_int_distribution<int> new_volume_dist(1, 500);
+                    order.volume = new_volume_dist(gen);
+                    std::uniform_int_distribution<int> side_dist(0, 1);
+                    if (side_dist(gen) == 0)
+                        book.update_bid(order.tick, order);
+                    else
+                        book.update_ask(order.tick, order);
+                }
+                else if (!active_orders.empty())
+                {
+                    std::uniform_int_distribution<size_t> idx_dist(0, active_orders.size() - 1);
+                    size_t idx = idx_dist(gen);
+                    auto order = active_orders[idx];
+                    std::uniform_int_distribution<int> side_dist(0, 1);
+                    if (side_dist(gen) == 0)
+                        book.remove_bid(order.tick, order);
+                    else
+                        book.remove_ask(order.tick, order);
+                    active_orders.erase(active_orders.begin() + static_cast<std::ptrdiff_t>(idx));
+                }
             }
-            else if (op == 1 && !active_orders.empty())
-            {
-                std::uniform_int_distribution<size_t> idx_dist(0, active_orders.size() - 1);
-                size_t idx = idx_dist(gen);
-                auto& order = active_orders[idx];
-                std::uniform_int_distribution<int> new_volume_dist(1, 500);
-                order.volume = new_volume_dist(gen);
-                std::uniform_int_distribution<int> side_dist(0, 1);
-                if (side_dist(gen) == 0)
-                    book.update_bid(order.tick, order);
-                else
-                    book.update_ask(order.tick, order);
-            }
-            else if (!active_orders.empty())
-            {
-                std::uniform_int_distribution<size_t> idx_dist(0, active_orders.size() - 1);
-                size_t idx = idx_dist(gen);
-                auto order = active_orders[idx];
-                std::uniform_int_distribution<int> side_dist(0, 1);
-                if (side_dist(gen) == 0)
-                    book.remove_bid(order.tick, order);
-                else
-                    book.remove_ask(order.tick, order);
-                active_orders.erase(active_orders.begin() + static_cast<std::ptrdiff_t>(idx));
-            }
+            benchmark::DoNotOptimize(book);
+
+            state.PauseTiming();
         }
-        benchmark::DoNotOptimize(book);
+        state.ResumeTiming();
     }
     state.SetComplexityN(state.range(0));
 }
@@ -674,47 +759,56 @@ static void BM_FifoOrderBook_MixedOps(benchmark::State& state)
 {
     for (auto _ : state)
     {
-        FifoOrderBook book{};
-        std::vector<jazzy::tests::order> active_orders;
-        const std::int64_t num_ops = state.range(0);
-        std::uniform_int_distribution<int> op_dist(0, 2);
-
-        for (std::int64_t i = 0; i < num_ops; ++i)
+        state.PauseTiming();
         {
-            int op = op_dist(gen);
-            if (op == 0 || active_orders.empty())
+            FifoOrderBook book{};
+            std::vector<std::pair<jazzy::tests::order, bool>> active_orders; // pair: (order, is_bid)
+            state.ResumeTiming();
+
+            const std::int64_t num_ops = state.range(0);
+            std::uniform_int_distribution<int> op_dist(0, 2);
+
+            for (std::int64_t i = 0; i < num_ops; ++i)
             {
-                auto order = generate_random_order(static_cast<int>(i));
-                active_orders.push_back(order);
-                add_random_order(book, order);
+                int op = op_dist(gen);
+                if (op == 0 || active_orders.empty())
+                {
+                    auto order = generate_random_order(static_cast<int>(i));
+                    bool is_bid = add_random_order(book, order);
+                    active_orders.emplace_back(order, is_bid);
+                }
+                else if (op == 1 && !active_orders.empty())
+                {
+                    std::uniform_int_distribution<size_t> idx_dist(0, active_orders.size() - 1);
+                    size_t idx = idx_dist(gen);
+                    auto& [order, is_bid] = active_orders[idx];
+                    std::uniform_int_distribution<int> new_volume_dist(1, 500);
+                    auto current = book.get_order(order.order_id);
+                    current.volume = new_volume_dist(gen);
+                    if (is_bid)
+                        book.update_bid(current.tick, current);
+                    else
+                        book.update_ask(current.tick, current);
+                    order = current;
+                }
+                else if (!active_orders.empty())
+                {
+                    std::uniform_int_distribution<size_t> idx_dist(0, active_orders.size() - 1);
+                    size_t idx = idx_dist(gen);
+                    auto [order, is_bid] = active_orders[idx];
+                    auto current = book.get_order(order.order_id);
+                    if (is_bid)
+                        book.remove_bid(current.tick, current);
+                    else
+                        book.remove_ask(current.tick, current);
+                    active_orders.erase(active_orders.begin() + static_cast<std::ptrdiff_t>(idx));
+                }
             }
-            else if (op == 1 && !active_orders.empty())
-            {
-                std::uniform_int_distribution<size_t> idx_dist(0, active_orders.size() - 1);
-                size_t idx = idx_dist(gen);
-                auto& order = active_orders[idx];
-                std::uniform_int_distribution<int> new_volume_dist(1, 500);
-                order.volume = new_volume_dist(gen);
-                std::uniform_int_distribution<int> side_dist(0, 1);
-                if (side_dist(gen) == 0)
-                    book.update_bid(order.tick, order);
-                else
-                    book.update_ask(order.tick, order);
-            }
-            else if (!active_orders.empty())
-            {
-                std::uniform_int_distribution<size_t> idx_dist(0, active_orders.size() - 1);
-                size_t idx = idx_dist(gen);
-                auto order = active_orders[idx];
-                std::uniform_int_distribution<int> side_dist(0, 1);
-                if (side_dist(gen) == 0)
-                    book.remove_bid(order.tick, order);
-                else
-                    book.remove_ask(order.tick, order);
-                active_orders.erase(active_orders.begin() + static_cast<std::ptrdiff_t>(idx));
-            }
+            benchmark::DoNotOptimize(book);
+
+            state.PauseTiming();
         }
-        benchmark::DoNotOptimize(book);
+        state.ResumeTiming();
     }
     state.SetComplexityN(state.range(0));
 }
@@ -725,12 +819,16 @@ static void BM_FifoOrderBook_FrontOrderLookup(benchmark::State& state)
     for (int i = 0; i < state.range(0); ++i)
     {
         auto order = generate_random_order(i);
-        add_random_order(book, order);
+        (void)add_random_order(book, order);
     }
 
     for (auto _ : state)
     {
-        const int max_levels = std::min(20, 50);
+        // Use actual number of levels in the book, capped at 20
+        const size_t max_bid_levels = book.bid_bitmap().count();
+        const size_t max_ask_levels = book.ask_bitmap().count();
+        const size_t max_levels = std::min({max_bid_levels, max_ask_levels, size_t(20)});
+
         for (size_t level = 0; level < max_levels; ++level)
         {
             auto bid_order = book.front_order_at_bid_level(level);
