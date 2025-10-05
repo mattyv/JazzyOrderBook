@@ -6,7 +6,7 @@
 #include <jazzy/traits.hpp>
 #include <jazzy/types.hpp>
 
-#include <memory>
+#include <memory_resource>
 #include <optional>
 #include <unordered_map>
 #include <utility>
@@ -21,11 +21,9 @@ template <
     typename TickType,
     typename OrderType,
     typename MarketStats,
-    typename Allocator = std::allocator<OrderType>,
-    typename LevelStorage = detail::aggregate_level_storage<OrderType, Allocator>>
+    typename LevelStorage = detail::aggregate_level_storage<OrderType>>
 requires tick<TickType> && order<OrderType> && market_stats<MarketStats> &&
-    std::same_as<typename MarketStats::tick_type, TickType> &&
-    std::same_as<typename std::allocator_traits<Allocator>::value_type, OrderType> && compatible_allocator<Allocator>
+    std::same_as<typename MarketStats::tick_type, TickType>
 class order_book
 {
     using order_type = OrderType;
@@ -56,38 +54,14 @@ class order_book
         level& operator=(level&&) noexcept(
             std::is_nothrow_move_assignable_v<volume_type> && std::is_nothrow_move_assignable_v<level_storage_type>) =
             default;
-
-        // Allocator-extended default constructor
-        // If volume_type uses allocators, construct it with the allocator; otherwise ignore
-        template <typename Alloc>
-        explicit level(std::allocator_arg_t, const Alloc& alloc)
-            : volume(std::make_obj_using_allocator<volume_type>(alloc))
-            , storage(std::allocator_arg, alloc)
-        {}
-
-        // Allocator-extended copy constructor
-        template <typename Alloc>
-        level(std::allocator_arg_t, const Alloc& alloc, const level& other)
-            : volume(std::make_obj_using_allocator<volume_type>(alloc, other.volume))
-            , storage(std::allocator_arg, alloc, other.storage)
-        {}
-
-        // Allocator-extended move constructor
-        template <typename Alloc>
-        level(std::allocator_arg_t, const Alloc& alloc, level&& other)
-            : volume(std::make_obj_using_allocator<volume_type>(alloc, std::move(other.volume)))
-            , storage(std::allocator_arg, alloc, std::move(other.storage))
-        {}
     };
 
 public:
     using value_type = OrderType;
     using size_type = size_t;
-    using allocator_type = Allocator;
 
 private:
     using tick_type_strong = typename MarketStats::tick_type_strong_t;
-    using allocator_traits = std::allocator_traits<allocator_type>;
 
     // When FIFO is enabled, we need to track where each order lives in the deque
     using queue_iterator = std::conditional_t<
@@ -116,13 +90,6 @@ private:
         explicit order_data(order_type&& o) : order(std::move(o)) {}
         explicit order_data(const order_type& o) : order(o) {}
     };
-
-    using order_map_value_type = std::pair<const id_type, order_data>;
-    using level_allocator_type = typename allocator_traits::template rebind_alloc<level>;
-    using order_storage_allocator_type = typename allocator_traits::template rebind_alloc<order_map_value_type>;
-
-    using propagate_on_container_copy_assignment = typename allocator_traits::propagate_on_container_copy_assignment;
-    using propagate_on_container_move_assignment = typename allocator_traits::propagate_on_container_move_assignment;
 
     static constexpr size_type calculate_size(
         const tick_type_strong& daily_high, const tick_type_strong& daily_low, double expected_range)
@@ -190,24 +157,21 @@ private:
         return tick_type_strong{static_cast<TickType>(bounds.second)};
     }
 
-    using bid_storage = std::vector<level, level_allocator_type>;
-    using ask_storage = std::vector<level, level_allocator_type>;
-    using order_storage = std::
-        unordered_map<id_type, order_data, std::hash<id_type>, std::equal_to<id_type>, order_storage_allocator_type>;
+    using bid_storage = std::pmr::vector<level>;
+    using ask_storage = std::pmr::vector<level>;
+    using order_storage = std::pmr::unordered_map<id_type, order_data, std::hash<id_type>, std::equal_to<id_type>>;
 
 public:
     using bitset_type = detail::level_bitmap<calculate_size(
         MarketStats::daily_high_v, MarketStats::daily_low_v, MarketStats::expected_range_v)>;
 
-    order_book()
-        : order_book(allocator_type{})
-    {}
-
-    explicit order_book(const allocator_type& allocator)
-        : bids_(level_allocator_type(allocator))
-        , asks_(level_allocator_type(allocator))
-        , orders_(order_storage_allocator_type(allocator))
-        , allocator_(allocator)
+    explicit order_book(std::pmr::memory_resource* resource = std::pmr::get_default_resource())
+        : bid_bitmap_()
+        , ask_bitmap_()
+        , bids_(resource)
+        , asks_(resource)
+        , orders_(resource)
+        , resource_(resource)
     {
         bids_.resize(size_);
         asks_.resize(size_);
@@ -217,23 +181,10 @@ public:
     ~order_book() = default;
 
     order_book(const order_book& other)
-        : best_bid_(other.best_bid_)
-        , best_ask_(other.best_ask_)
-        , bid_bitmap_(other.bid_bitmap_)
-        , ask_bitmap_(other.ask_bitmap_)
-        , bids_(
-              other.bids_,
-              level_allocator_type(allocator_traits::select_on_container_copy_construction(other.allocator_)))
-        , asks_(
-              other.asks_,
-              level_allocator_type(allocator_traits::select_on_container_copy_construction(other.allocator_)))
-        , orders_(
-              other.orders_,
-              order_storage_allocator_type(allocator_traits::select_on_container_copy_construction(other.allocator_)))
-        , allocator_(allocator_traits::select_on_container_copy_construction(other.allocator_))
+        : order_book(other, other.resource_)
     {}
 
-    order_book(order_book&& other) noexcept(std::is_nothrow_move_constructible_v<allocator_type>)
+    order_book(order_book&& other) noexcept
         : best_bid_(std::move(other.best_bid_))
         , best_ask_(std::move(other.best_ask_))
         , bid_bitmap_(std::move(other.bid_bitmap_))
@@ -241,81 +192,60 @@ public:
         , bids_(std::move(other.bids_))
         , asks_(std::move(other.asks_))
         , orders_(std::move(other.orders_))
-        , allocator_(std::move(other.allocator_))
+        , resource_(other.resource_)
     {}
 
     order_book& operator=(const order_book& other)
     {
         if (this != &other)
         {
-            // Create a copy, then swap with it (copy-and-swap idiom)
-            order_book temp(other);
-
-            using std::swap;
-
-            // Handle allocator propagation
-            if constexpr (propagate_on_container_copy_assignment::value)
-            {
-                swap(allocator_, temp.allocator_);
-            }
-
-            swap(best_bid_, temp.best_bid_);
-            swap(best_ask_, temp.best_ask_);
-            swap(bid_bitmap_, temp.bid_bitmap_);
-            swap(ask_bitmap_, temp.ask_bitmap_);
-            swap(bids_, temp.bids_);
-            swap(asks_, temp.asks_);
-            swap(orders_, temp.orders_);
+            order_book temp(other, resource_);
+            swap(temp);
         }
         return *this;
     }
 
-    order_book& operator=(order_book&& other) noexcept(
-        propagate_on_container_move_assignment::value || allocator_traits::is_always_equal::value)
+    order_book& operator=(order_book&& other) noexcept
     {
         if (this != &other)
         {
-            if constexpr (propagate_on_container_move_assignment::value)
-            {
-                // Propagate allocator and move everything
-                allocator_ = std::move(other.allocator_);
-                bids_ = std::move(other.bids_);
-                asks_ = std::move(other.asks_);
-                orders_ = std::move(other.orders_);
-                best_bid_ = std::move(other.best_bid_);
-                best_ask_ = std::move(other.best_ask_);
-                bid_bitmap_ = std::move(other.bid_bitmap_);
-                ask_bitmap_ = std::move(other.ask_bitmap_);
-            }
-            else
-            {
-                // Check if allocators are equal
-                if (allocator_ == other.allocator_)
-                {
-                    // Same allocator, can move efficiently
-                    bids_ = std::move(other.bids_);
-                    asks_ = std::move(other.asks_);
-                    orders_ = std::move(other.orders_);
-                    best_bid_ = std::move(other.best_bid_);
-                    best_ask_ = std::move(other.best_ask_);
-                    bid_bitmap_ = std::move(other.bid_bitmap_);
-                    ask_bitmap_ = std::move(other.ask_bitmap_);
-                }
-                else
-                {
-                    // Different allocators, must copy everything to keep source valid
-                    bids_ = other.bids_;
-                    asks_ = other.asks_;
-                    orders_ = other.orders_;
-                    best_bid_ = other.best_bid_;
-                    best_ask_ = other.best_ask_;
-                    bid_bitmap_ = other.bid_bitmap_;
-                    ask_bitmap_ = other.ask_bitmap_;
-                }
-            }
+            best_bid_ = std::move(other.best_bid_);
+            best_ask_ = std::move(other.best_ask_);
+            bid_bitmap_ = std::move(other.bid_bitmap_);
+            ask_bitmap_ = std::move(other.ask_bitmap_);
+            bids_ = std::move(other.bids_);
+            asks_ = std::move(other.asks_);
+            orders_ = std::move(other.orders_);
+            // Don't change resource_ - preserve destination's resource
         }
         return *this;
     }
+
+    order_book(const order_book& other, std::pmr::memory_resource* resource)
+        : best_bid_(other.best_bid_)
+        , best_ask_(other.best_ask_)
+        , bid_bitmap_(other.bid_bitmap_)
+        , ask_bitmap_(other.ask_bitmap_)
+        , bids_(other.bids_, resource)
+        , asks_(other.asks_, resource)
+        , orders_(other.orders_, resource)
+        , resource_(resource)
+    {}
+
+    void swap(order_book& other) noexcept
+    {
+        using std::swap;
+        swap(best_bid_, other.best_bid_);
+        swap(best_ask_, other.best_ask_);
+        swap(bid_bitmap_, other.bid_bitmap_);
+        swap(ask_bitmap_, other.ask_bitmap_);
+        swap(bids_, other.bids_);
+        swap(asks_, other.asks_);
+        swap(orders_, other.orders_);
+        // Don't swap resource_ - containers must deallocate from their original resource
+    }
+
+    friend void swap(order_book& lhs, order_book& rhs) noexcept { lhs.swap(rhs); }
 
     template <typename U>
     requires order<U> && std::same_as<order_type, std::decay_t<U>>
@@ -730,7 +660,7 @@ public:
     [[nodiscard]] const bitset_type& bid_bitmap() const noexcept { return bid_bitmap_; }
     [[nodiscard]] const bitset_type& ask_bitmap() const noexcept { return ask_bitmap_; }
 
-    [[nodiscard]] allocator_type get_allocator() const noexcept { return allocator_; }
+    [[nodiscard]] std::pmr::memory_resource* get_memory_resource() const noexcept { return resource_; }
 
     // FIFO-specific functions: only available when FIFO storage is enabled
     [[nodiscard]] order_type front_order_at_bid_level(size_type level) const
@@ -827,7 +757,7 @@ public:
     bid_storage bids_;
     ask_storage asks_;
     order_storage orders_;
-    [[no_unique_address]] allocator_type allocator_;
+    std::pmr::memory_resource* resource_;
 };
 
 } // namespace jazzy

@@ -82,18 +82,6 @@ concept order = requires(T const& order) {
     requires tick<order_tick_type<T>>;
 };
 
-template <typename T>
-concept compatible_allocator = requires(T alloc) {
-    typename std::allocator_traits<T>::value_type;
-    { alloc.allocate(1) } -> std::same_as<typename std::allocator_traits<T>::value_type*>;
-    { alloc.deallocate(std::declval<typename std::allocator_traits<T>::value_type*>(), 1) } -> std::same_as<void>;
-    requires std::is_copy_constructible_v<T>;
-    requires std::is_move_constructible_v<T>;
-    requires std::is_copy_assignable_v<T>;
-    requires std::is_move_assignable_v<T>;
-    requires requires { typename std::allocator_traits<T>::template rebind_alloc<int>; };
-};
-
 constexpr detail::order_id_getter order_id_getter;
 constexpr detail::order_volume_getter order_volume_getter;
 constexpr detail::order_tick_getter order_tick_getter;
@@ -102,10 +90,10 @@ constexpr detail::order_tick_setter order_tick_setter;
 
 // Forward declare storage policies
 namespace detail {
-template <typename OrderType, typename Allocator>
+template <typename OrderType>
 struct aggregate_level_storage;
 
-template <typename OrderType, typename Allocator>
+template <typename OrderType>
 struct fifo_level_storage;
 } // namespace detail
 
@@ -114,8 +102,8 @@ template <typename T>
 struct is_fifo_storage : std::false_type
 {};
 
-template <typename OrderType, typename Allocator>
-struct is_fifo_storage<detail::fifo_level_storage<OrderType, Allocator>> : std::true_type
+template <typename OrderType>
+struct is_fifo_storage<detail::fifo_level_storage<OrderType>> : std::true_type
 {};
 
 template <typename T>
