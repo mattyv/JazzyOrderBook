@@ -3,8 +3,8 @@
 #include <order.hpp>
 
 using test_market_stats = jazzy::market_statistics<int, 130, 90, 110, 2000>;
-using fifo_storage = jazzy::detail::fifo_level_storage<jazzy::tests::order, std::allocator<jazzy::tests::order>>;
-using FifoOrderBook = jazzy::order_book<int, jazzy::tests::order, test_market_stats, std::allocator<jazzy::tests::order>, fifo_storage>;
+using fifo_storage = jazzy::detail::fifo_level_storage<jazzy::tests::order>;
+using FifoOrderBook = jazzy::order_book<int, jazzy::tests::order, test_market_stats, fifo_storage>;
 
 SCENARIO("FIFO order book maintains order queue at each price level", "[orderbook][fifo]")
 {

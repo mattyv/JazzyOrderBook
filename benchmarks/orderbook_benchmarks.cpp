@@ -532,8 +532,8 @@ BENCHMARK(BM_JazzyOrderBook_MixedOps)->Range(8, 8 << 10)->Complexity();
 BENCHMARK(BM_MapOrderBook_MixedOps)->Range(8, 8 << 10)->Complexity();
 
 // FIFO vs Aggregate Storage Benchmarks
-using fifo_storage = jazzy::detail::fifo_level_storage<jazzy::tests::order, std::allocator<jazzy::tests::order>>;
-using FifoOrderBook = jazzy::order_book<int, jazzy::tests::order, test_market_stats, std::allocator<jazzy::tests::order>, fifo_storage>;
+using fifo_storage = jazzy::detail::fifo_level_storage<jazzy::tests::order>;
+using FifoOrderBook = jazzy::order_book<int, jazzy::tests::order, test_market_stats, fifo_storage>;
 
 static void BM_AggregateOrderBook_AddOrders(benchmark::State& state)
 {
