@@ -27,16 +27,18 @@ jazzy::tests::order generate_random_order(int order_id)
 
 // Helper to add order to book (randomly bid or ask)
 template <typename BookType>
-void add_random_order(BookType& book, const jazzy::tests::order& order)
+bool add_random_order(BookType& book, const jazzy::tests::order& order)
 {
     std::uniform_int_distribution<int> side_dist(0, 1);
     if (side_dist(gen) == 0)
     {
         book.insert_bid(order.tick, order);
+        return true;
     }
     else
     {
         book.insert_ask(order.tick, order);
+        return false;
     }
 }
 
@@ -45,13 +47,15 @@ static void BM_JazzyOrderBook_AddOrders(benchmark::State& state)
 {
     for (auto _ : state)
     {
+        state.PauseTiming();
         VectorOrderBook book{};
+        state.ResumeTiming();
 
         // Add orders equal to the benchmark parameter
         for (int i = 0; i < state.range(0); ++i)
         {
             auto order = generate_random_order(i);
-            add_random_order(book, order);
+            (void)add_random_order(book, order);
         }
 
         benchmark::DoNotOptimize(book);
@@ -63,13 +67,15 @@ static void BM_MapOrderBook_AddOrders(benchmark::State& state)
 {
     for (auto _ : state)
     {
+        state.PauseTiming();
         MapOrderBook book{};
+        state.ResumeTiming();
 
         // Add orders equal to the benchmark parameter
         for (int i = 0; i < state.range(0); ++i)
         {
             auto order = generate_random_order(i);
-            add_random_order(book, order);
+            (void)add_random_order(book, order);
         }
 
         benchmark::DoNotOptimize(book);
@@ -88,7 +94,7 @@ static void BM_JazzyOrderBook_VolumeLookup(benchmark::State& state)
     {
         auto order = generate_random_order(i);
         ticks.push_back(order.tick);
-        add_random_order(book, order);
+        (void)add_random_order(book, order);
     }
 
     // Shuffle ticks for random access pattern
@@ -118,7 +124,7 @@ static void BM_MapOrderBook_VolumeLookup(benchmark::State& state)
     {
         auto order = generate_random_order(i);
         ticks.push_back(order.tick);
-        add_random_order(book, order);
+        (void)add_random_order(book, order);
     }
 
     // Shuffle ticks for random access pattern
@@ -143,8 +149,10 @@ static void BM_JazzyOrderBook_MixedOps(benchmark::State& state)
 {
     for (auto _ : state)
     {
+        state.PauseTiming();
         VectorOrderBook book{};
         std::vector<jazzy::tests::order> active_orders;
+        state.ResumeTiming();
 
         const std::int64_t num_ops = state.range(0);
         std::uniform_int_distribution<int> op_dist(0, 2); // 0=add, 1=update, 2=remove
@@ -158,7 +166,7 @@ static void BM_JazzyOrderBook_MixedOps(benchmark::State& state)
                 // Add operation
                 auto order = generate_random_order(static_cast<int>(i));
                 active_orders.push_back(order);
-                add_random_order(book, order);
+                (void)add_random_order(book, order);
             }
             else if (op == 1 && !active_orders.empty())
             {
@@ -210,8 +218,10 @@ static void BM_MapOrderBook_MixedOps(benchmark::State& state)
 {
     for (auto _ : state)
     {
+        state.PauseTiming();
         MapOrderBook book{};
         std::vector<jazzy::tests::order> active_orders;
+        state.ResumeTiming();
 
         const std::int64_t num_ops = state.range(0);
         std::uniform_int_distribution<int> op_dist(0, 2); // 0=add, 1=update, 2=remove
@@ -225,7 +235,7 @@ static void BM_MapOrderBook_MixedOps(benchmark::State& state)
                 // Add operation
                 auto order = generate_random_order(static_cast<int>(i));
                 active_orders.push_back(order);
-                add_random_order(book, order);
+                (void)add_random_order(book, order);
             }
             else if (op == 1 && !active_orders.empty())
             {
@@ -292,7 +302,7 @@ static void BM_JazzyOrderBook_UpdateOrders(benchmark::State& state)
     {
         jazzy::tests::order order{i, volume_dist(gen), hot_tick_dist(gen)};
         hot_orders.push_back(order);
-        add_random_order(book, order);
+        (void)add_random_order(book, order);
     }
 
     // Pre-populate cold orders: spread across full range
@@ -301,7 +311,7 @@ static void BM_JazzyOrderBook_UpdateOrders(benchmark::State& state)
     {
         jazzy::tests::order order{static_cast<int>(i), volume_dist(gen), cold_tick_dist(gen)};
         cold_orders.push_back(order);
-        add_random_order(book, order);
+        (void)add_random_order(book, order);
     }
 
     std::uniform_int_distribution<int> update_dist(0, 99); // 0-99 for percentage
@@ -351,7 +361,7 @@ static void BM_MapOrderBook_UpdateOrders(benchmark::State& state)
     {
         jazzy::tests::order order{i, volume_dist(gen), hot_tick_dist(gen)};
         hot_orders.push_back(order);
-        add_random_order(book, order);
+        (void)add_random_order(book, order);
     }
 
     // Pre-populate cold orders: spread across full range
@@ -360,7 +370,7 @@ static void BM_MapOrderBook_UpdateOrders(benchmark::State& state)
     {
         jazzy::tests::order order{static_cast<int>(i), volume_dist(gen), cold_tick_dist(gen)};
         cold_orders.push_back(order);
-        add_random_order(book, order);
+        (void)add_random_order(book, order);
     }
 
     std::uniform_int_distribution<int> update_dist(0, 99); // 0-99 for percentage
@@ -397,6 +407,7 @@ static void BM_JazzyOrderBook_DeleteOrders(benchmark::State& state)
 {
     for (auto _ : state)
     {
+        state.PauseTiming();
         VectorOrderBook book{};
         std::vector<jazzy::tests::order> orders;
 
@@ -405,8 +416,9 @@ static void BM_JazzyOrderBook_DeleteOrders(benchmark::State& state)
         {
             auto order = generate_random_order(i);
             orders.push_back(order);
-            add_random_order(book, order);
+            (void)add_random_order(book, order);
         }
+        state.ResumeTiming();
 
         // Time the deletion of all orders
         for (const auto& order : orders)
@@ -430,6 +442,7 @@ static void BM_MapOrderBook_DeleteOrders(benchmark::State& state)
 {
     for (auto _ : state)
     {
+        state.PauseTiming();
         MapOrderBook book{};
         std::vector<jazzy::tests::order> orders;
 
@@ -438,8 +451,9 @@ static void BM_MapOrderBook_DeleteOrders(benchmark::State& state)
         {
             auto order = generate_random_order(i);
             orders.push_back(order);
-            add_random_order(book, order);
+            (void)add_random_order(book, order);
         }
+        state.ResumeTiming();
 
         // Time the deletion of all orders
         for (const auto& order : orders)
@@ -468,7 +482,7 @@ static void BM_JazzyOrderBook_GetOrderAtLevel(benchmark::State& state)
     for (int i = 0; i < state.range(0); ++i)
     {
         auto order = generate_random_order(i);
-        add_random_order(book, order);
+        (void)add_random_order(book, order);
     }
 
     for (auto _ : state)
@@ -494,7 +508,7 @@ static void BM_MapOrderBook_GetOrderAtLevel(benchmark::State& state)
     for (int i = 0; i < state.range(0); ++i)
     {
         auto order = generate_random_order(i);
-        add_random_order(book, order);
+        (void)add_random_order(book, order);
     }
 
     for (auto _ : state)
