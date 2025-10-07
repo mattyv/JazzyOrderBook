@@ -24,6 +24,10 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
         -Werror
         -Wconversion -Wsign-conversion -Wcast-align -Wformat=2
     )
+    # GCC-14 has false positives with -Wmaybe-uninitialized in standard library headers (e.g., regex in Catch2)
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        target_compile_options(${PROJECT_NAME} PRIVATE -Wno-error=maybe-uninitialized)
+    endif()
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
     target_compile_options(${PROJECT_NAME} PRIVATE /WX)
 endif()
