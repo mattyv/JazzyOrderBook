@@ -161,12 +161,26 @@ JAZZY_NO_SANITIZE_UNDEFINED inline constexpr unsigned int select_bit_from_msb_br
     assert(value != 0);
 #if JAZZY_HAS_BUILTIN_CTZ
     return __builtin_ctzll(value);
-#elif defined(_MSC_VER) && !defined(__clang__)
-    unsigned long index{};
-    _BitScanForward64(&index, value);
-    return static_cast<int>(index);
 #elif defined(__cpp_lib_bitops) && (__cpp_lib_bitops >= 201907L)
     return static_cast<int>(std::countr_zero(value));
+#elif defined(_MSC_VER) && !defined(__clang__)
+    if (std::is_constant_evaluated())
+    {
+        // Fallback for compile-time evaluation
+        unsigned int shift = 0;
+        while ((value & 1ULL) == 0ULL)
+        {
+            value >>= 1;
+            ++shift;
+        }
+        return static_cast<int>(shift);
+    }
+    else
+    {
+        unsigned long index{};
+        _BitScanForward64(&index, value);
+        return static_cast<int>(index);
+    }
 #elif JAZZY_HAS_NO_SANITIZE_UNDEFINED
     return lsb_index_debruijn(value);
 #else

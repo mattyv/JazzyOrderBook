@@ -28,10 +28,14 @@ if(ENABLE_ASAN_BENCHMARKS)
 endif()
 
 if(ENABLE_UBSAN_BENCHMARKS)
-    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
-        # Exclude integer sanitizer for benchmarks as it can cause false positives
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|AppleClang")
+        # Clang-specific sanitizers (exclude integer for benchmarks as it can cause false positives)
         target_compile_options(${PROJECT_NAME} PRIVATE -fsanitize=undefined,nullability,implicit-conversion,local-bounds,float-divide-by-zero -fno-sanitize-recover=all)
         target_link_options(${PROJECT_NAME} PRIVATE -fsanitize=undefined,nullability,implicit-conversion,local-bounds,float-divide-by-zero)
+    elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        # GCC doesn't support nullability, implicit-conversion, local-bounds
+        target_compile_options(${PROJECT_NAME} PRIVATE -fsanitize=undefined,float-divide-by-zero -fno-sanitize-recover=all)
+        target_link_options(${PROJECT_NAME} PRIVATE -fsanitize=undefined,float-divide-by-zero)
     endif()
 endif()
 
@@ -73,10 +77,14 @@ if(ENABLE_ASAN_BENCHMARKS)
 endif()
 
 if(ENABLE_UBSAN_BENCHMARKS)
-    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
-        # Exclude integer sanitizer for benchmarks as it can cause false positives
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|AppleClang")
+        # Clang-specific sanitizers (exclude integer for benchmarks as it can cause false positives)
         target_compile_options(${PROJECT_NAME}_portable PRIVATE -fsanitize=undefined,nullability,implicit-conversion,local-bounds,float-divide-by-zero -fno-sanitize-recover=all)
         target_link_options(${PROJECT_NAME}_portable PRIVATE -fsanitize=undefined,nullability,implicit-conversion,local-bounds,float-divide-by-zero)
+    elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        # GCC doesn't support nullability, implicit-conversion, local-bounds
+        target_compile_options(${PROJECT_NAME}_portable PRIVATE -fsanitize=undefined,float-divide-by-zero -fno-sanitize-recover=all)
+        target_link_options(${PROJECT_NAME}_portable PRIVATE -fsanitize=undefined,float-divide-by-zero)
     endif()
 endif()
 

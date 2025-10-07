@@ -37,9 +37,14 @@ if(ENABLE_ASAN_TESTS)
 endif()
 
 if(ENABLE_UBSAN_TESTS)
-    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|AppleClang")
+        # Clang-specific sanitizers
         target_compile_options(${PROJECT_NAME} PRIVATE -fsanitize=undefined,integer,nullability,implicit-conversion,local-bounds,float-divide-by-zero -fno-sanitize-recover=all)
         target_link_options(${PROJECT_NAME} PRIVATE -fsanitize=undefined,integer,nullability,implicit-conversion,local-bounds,float-divide-by-zero)
+    elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        # GCC doesn't support integer, nullability, implicit-conversion, local-bounds
+        target_compile_options(${PROJECT_NAME} PRIVATE -fsanitize=undefined,float-divide-by-zero -fno-sanitize-recover=all)
+        target_link_options(${PROJECT_NAME} PRIVATE -fsanitize=undefined,float-divide-by-zero)
     endif()
 endif()
 
