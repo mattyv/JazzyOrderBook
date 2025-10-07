@@ -1,136 +1,171 @@
-------------------------------------------------------------------------------------------
-Benchmark                                                Time             CPU   Iterations
-------------------------------------------------------------------------------------------
-OrderBookFixture/JazzyAddOrders/8                      297 ns          297 ns      2347654
-OrderBookFixture/JazzyAddOrders/64                    2372 ns         2372 ns       295667
-OrderBookFixture/JazzyAddOrders/512                  18839 ns        18839 ns        37164
-OrderBookFixture/JazzyAddOrders/4096                151621 ns       151619 ns         4260
-OrderBookFixture/JazzyAddOrders/8192                302541 ns       302541 ns         2112
-OrderBookFixture/JazzyAddOrders_BigO                 36.95 N         36.95 N    
-OrderBookFixture/JazzyAddOrders_RMS                      0 %             0 %    
-OrderBookFixture/MapAddOrders/8                        432 ns          432 ns      1570260
-OrderBookFixture/MapAddOrders/64                      4234 ns         4234 ns       165561
-OrderBookFixture/MapAddOrders/512                    29155 ns        29143 ns        23924
-OrderBookFixture/MapAddOrders/4096                  218824 ns       218808 ns         3051
-OrderBookFixture/MapAddOrders/8192                  434774 ns       434775 ns         1551
-OrderBookFixture/MapAddOrders_BigO                   53.16 N         53.15 N    
-OrderBookFixture/MapAddOrders_RMS                        1 %             1 %    
-BM_JazzyOrderBook_UpdateOrders/8                       205 ns          205 ns      3400799
-BM_JazzyOrderBook_UpdateOrders/64                     1621 ns         1620 ns       433431
-BM_JazzyOrderBook_UpdateOrders/512                   12843 ns        12843 ns        54477
-BM_JazzyOrderBook_UpdateOrders/4096                 104280 ns       104280 ns         6710
-BM_JazzyOrderBook_UpdateOrders/8192                 212670 ns       212670 ns         3273
-BM_JazzyOrderBook_UpdateOrders_BigO                  25.86 N         25.86 N    
-BM_JazzyOrderBook_UpdateOrders_RMS                       1 %             1 %    
-BM_MapOrderBook_UpdateOrders/8                         238 ns          238 ns      2941770
-BM_MapOrderBook_UpdateOrders/64                       2047 ns         2047 ns       341034
-BM_MapOrderBook_UpdateOrders/512                     18054 ns        18054 ns        38296
-BM_MapOrderBook_UpdateOrders/4096                   151617 ns       151617 ns         4617
-BM_MapOrderBook_UpdateOrders/8192                   311325 ns       310946 ns         2347
-BM_MapOrderBook_UpdateOrders_BigO                    37.80 N         37.76 N    
-BM_MapOrderBook_UpdateOrders_RMS                         2 %             2 %    
-OrderBookFixture/JazzyDeleteOrders/8                   720 ns          723 ns       948188
-OrderBookFixture/JazzyDeleteOrders/64                 1815 ns         1819 ns       383949
-OrderBookFixture/JazzyDeleteOrders/512                9316 ns         9318 ns        74831
-OrderBookFixture/JazzyDeleteOrders/4096              72490 ns        72491 ns         9528
-OrderBookFixture/JazzyDeleteOrders/8192             147050 ns       147036 ns         4822
-OrderBookFixture/JazzyDeleteOrders_BigO              17.90 N         17.90 N    
-OrderBookFixture/JazzyDeleteOrders_RMS                   1 %             1 %    
-OrderBookFixture/MapDeleteOrders/8                     899 ns          902 ns       774713
-OrderBookFixture/MapDeleteOrders/64                   4000 ns         4001 ns       174956
-OrderBookFixture/MapDeleteOrders/512                 22441 ns        22442 ns        31003
-OrderBookFixture/MapDeleteOrders/4096               163485 ns       163481 ns         4273
-OrderBookFixture/MapDeleteOrders/8192               323385 ns       323369 ns         2162
-OrderBookFixture/MapDeleteOrders_BigO                39.58 N         39.58 N    
-OrderBookFixture/MapDeleteOrders_RMS                     1 %             1 %    
-BM_JazzyOrderBook_VolumeLookup/8                      4.61 ns         4.61 ns    152952976
-BM_JazzyOrderBook_VolumeLookup/64                     37.2 ns         37.2 ns     18816193
-BM_JazzyOrderBook_VolumeLookup/512                     305 ns          305 ns      2311146
-BM_JazzyOrderBook_VolumeLookup/4096                   2386 ns         2386 ns       293302
-BM_JazzyOrderBook_VolumeLookup/8192                   4767 ns         4767 ns       146724
-BM_JazzyOrderBook_VolumeLookup_BigO                   0.58 N          0.58 N    
-BM_JazzyOrderBook_VolumeLookup_RMS                       0 %             0 %    
-BM_MapOrderBook_VolumeLookup/8                        24.7 ns         24.7 ns     28340769
-BM_MapOrderBook_VolumeLookup/64                        426 ns          427 ns      1642942
-BM_MapOrderBook_VolumeLookup/512                      4479 ns         4479 ns       131275
-BM_MapOrderBook_VolumeLookup/4096                    69006 ns        69006 ns         9042
-BM_MapOrderBook_VolumeLookup/8192                   165604 ns       165604 ns         4157
-BM_MapOrderBook_VolumeLookup_BigO                     1.53 NlgN       1.53 NlgN 
-BM_MapOrderBook_VolumeLookup_RMS                         7 %             7 %    
-BM_JazzyOrderBook_GetOrderAtLevel/8                   15.5 ns         15.5 ns     45226066
-BM_JazzyOrderBook_GetOrderAtLevel/64                   144 ns          144 ns      4854133
-BM_JazzyOrderBook_GetOrderAtLevel/512                  144 ns          144 ns      4849929
-BM_JazzyOrderBook_GetOrderAtLevel/4096                 146 ns          146 ns      4822963
-BM_JazzyOrderBook_GetOrderAtLevel/8192                 145 ns          145 ns      4829651
-BM_JazzyOrderBook_GetOrderAtLevel_BigO               13.30 lgN       13.30 lgN  
-BM_JazzyOrderBook_GetOrderAtLevel_RMS                   30 %            30 %    
-BM_MapOrderBook_GetOrderAtLevel/8                     69.5 ns         69.5 ns     10046357
-BM_MapOrderBook_GetOrderAtLevel/64                     602 ns          602 ns      1163448
-BM_MapOrderBook_GetOrderAtLevel/512                    611 ns          611 ns      1142988
-BM_MapOrderBook_GetOrderAtLevel/4096                   611 ns          611 ns      1145588
-BM_MapOrderBook_GetOrderAtLevel/8192                   612 ns          612 ns      1148520
-BM_MapOrderBook_GetOrderAtLevel_BigO                 56.08 lgN       56.08 lgN  
-BM_MapOrderBook_GetOrderAtLevel_RMS                     29 %            29 %    
-OrderBookFixture/JazzyMixedOps/8                       423 ns          423 ns      1624692
-OrderBookFixture/JazzyMixedOps/64                     3444 ns         3444 ns       203158
-OrderBookFixture/JazzyMixedOps/512                   28424 ns        28424 ns        24681
-OrderBookFixture/JazzyMixedOps/4096                 243028 ns       243002 ns         2849
-OrderBookFixture/JazzyMixedOps/8192                 507327 ns       507295 ns         1000
-OrderBookFixture/JazzyMixedOps_BigO                  61.39 N         61.39 N    
-OrderBookFixture/JazzyMixedOps_RMS                       3 %             3 %    
-OrderBookFixture/MapMixedOps/8                         505 ns          505 ns      1385535
-OrderBookFixture/MapMixedOps/64                       4246 ns         4246 ns       164620
-OrderBookFixture/MapMixedOps/512                     38337 ns        38337 ns        18274
-OrderBookFixture/MapMixedOps/4096                   329421 ns       329421 ns         2099
-OrderBookFixture/MapMixedOps/8192                   680163 ns       680127 ns         1071
-OrderBookFixture/MapMixedOps_BigO                    82.48 N         82.48 N    
-OrderBookFixture/MapMixedOps_RMS                         2 %             2 %    
-FifoOrderBookFixture/AggregateAddOrders/8              323 ns          323 ns      2165687
-FifoOrderBookFixture/AggregateAddOrders/64            2440 ns         2440 ns       287605
-FifoOrderBookFixture/AggregateAddOrders/512          19017 ns        19017 ns        36851
-FifoOrderBookFixture/AggregateAddOrders/4096        152370 ns       152369 ns         4219
-FifoOrderBookFixture/AggregateAddOrders/8192        303373 ns       303373 ns         2159
-FifoOrderBookFixture/AggregateAddOrders_BigO         37.07 N         37.07 N    
-FifoOrderBookFixture/AggregateAddOrders_RMS              0 %             0 %    
-FifoOrderBookFixture/FifoAddOrders/8                   389 ns          389 ns      1736813
-FifoOrderBookFixture/FifoAddOrders/64                 3269 ns         3268 ns       219353
-FifoOrderBookFixture/FifoAddOrders/512               27355 ns        27355 ns        25272
-FifoOrderBookFixture/FifoAddOrders/4096             219506 ns       219506 ns         2999
-FifoOrderBookFixture/FifoAddOrders/8192             439453 ns       439453 ns         1510
-FifoOrderBookFixture/FifoAddOrders_BigO              53.63 N         53.63 N    
-FifoOrderBookFixture/FifoAddOrders_RMS                   0 %             0 %    
-FifoOrderBookFixture/AggregateUpdateOrders/8           544 ns          544 ns      1291156
-FifoOrderBookFixture/AggregateUpdateOrders/64         3896 ns         3896 ns       179572
-FifoOrderBookFixture/AggregateUpdateOrders/512       29254 ns        29250 ns        24106
-FifoOrderBookFixture/AggregateUpdateOrders/4096     230650 ns       230650 ns         2879
-FifoOrderBookFixture/AggregateUpdateOrders/8192     460677 ns       460678 ns         1467
-FifoOrderBookFixture/AggregateUpdateOrders_BigO      56.25 N         56.25 N    
-FifoOrderBookFixture/AggregateUpdateOrders_RMS           0 %             0 %    
-FifoOrderBookFixture/FifoUpdateOrders/8                731 ns          731 ns       956467
-FifoOrderBookFixture/FifoUpdateOrders/64              5428 ns         5428 ns       129822
-FifoOrderBookFixture/FifoUpdateOrders/512            42790 ns        42790 ns        16337
-FifoOrderBookFixture/FifoUpdateOrders/4096          351548 ns       351548 ns         1900
-FifoOrderBookFixture/FifoUpdateOrders/8192          737161 ns       735347 ns          982
-FifoOrderBookFixture/FifoUpdateOrders_BigO           89.14 N         88.96 N    
-FifoOrderBookFixture/FifoUpdateOrders_RMS                3 %             3 %    
-FifoOrderBookFixture/AggregateMixedOps/8               426 ns          426 ns      1662589
-FifoOrderBookFixture/AggregateMixedOps/64             3424 ns         3424 ns       203824
-FifoOrderBookFixture/AggregateMixedOps/512           28129 ns        28129 ns        24814
-FifoOrderBookFixture/AggregateMixedOps/4096         241927 ns       241927 ns         2853
-FifoOrderBookFixture/AggregateMixedOps/8192         491813 ns       491814 ns         1407
-FifoOrderBookFixture/AggregateMixedOps_BigO          59.83 N         59.83 N    
-FifoOrderBookFixture/AggregateMixedOps_RMS               1 %             1 %    
-FifoOrderBookFixture/FifoMixedOps/8                    520 ns          520 ns      1347294
-FifoOrderBookFixture/FifoMixedOps/64                  4065 ns         4065 ns       172052
-FifoOrderBookFixture/FifoMixedOps/512                33703 ns        33703 ns        20781
-FifoOrderBookFixture/FifoMixedOps/4096              299878 ns       299878 ns         2268
-FifoOrderBookFixture/FifoMixedOps/8192              623866 ns       623769 ns         1232
-FifoOrderBookFixture/FifoMixedOps_BigO               75.54 N         75.53 N    
-FifoOrderBookFixture/FifoMixedOps_RMS                    3 %             3 %    
-BM_FifoOrderBook_FrontOrderLookup/8                   14.4 ns         14.4 ns     48408401
-BM_FifoOrderBook_FrontOrderLookup/64                   191 ns          191 ns      3655314
-BM_FifoOrderBook_FrontOrderLookup/512                  191 ns          191 ns      3656957
-BM_FifoOrderBook_FrontOrderLookup/4096                 191 ns          191 ns      3664288
-BM_FifoOrderBook_FrontOrderLookup/8192                 191 ns          191 ns      3665920
-BM_FifoOrderBook_FrontOrderLookup_BigO               17.52 lgN       17.52 lgN  
-BM_FifoOrderBook_FrontOrderLookup_RMS                   31 %            31 %    
+------------------------------------------------------------------------------------------------------
+Benchmark                                                            Time             CPU   Iterations
+------------------------------------------------------------------------------------------------------
+OrderBookFixture/AddOrders_JazzyVector/8                           296 ns          296 ns      2414917
+OrderBookFixture/AddOrders_JazzyVector/64                         2356 ns         2356 ns       297264
+OrderBookFixture/AddOrders_JazzyVector/512                       18748 ns        18748 ns        37391
+OrderBookFixture/AddOrders_JazzyVector/4096                     151054 ns       151054 ns         4239
+OrderBookFixture/AddOrders_JazzyVector/8192                     302879 ns       302880 ns         2204
+OrderBookFixture/AddOrders_JazzyVector_BigO                      36.95 N         36.95 N    
+OrderBookFixture/AddOrders_JazzyVector_RMS                           0 %             0 %    
+BM_UpdateOrders_JazzyVector/8                                      205 ns          205 ns      3418787
+BM_UpdateOrders_JazzyVector/64                                    1609 ns         1609 ns       434783
+BM_UpdateOrders_JazzyVector/512                                  12826 ns        12826 ns        54510
+BM_UpdateOrders_JazzyVector/4096                                104037 ns       104037 ns         6753
+BM_UpdateOrders_JazzyVector/8192                                209099 ns       209099 ns         3311
+BM_UpdateOrders_JazzyVector_BigO                                 25.50 N         25.50 N    
+BM_UpdateOrders_JazzyVector_RMS                                      0 %             0 %    
+OrderBookFixture/DeleteOrders_JazzyVector/8                        721 ns          723 ns       969986
+OrderBookFixture/DeleteOrders_JazzyVector/64                      1799 ns         1801 ns       382982
+OrderBookFixture/DeleteOrders_JazzyVector/512                     9248 ns         9247 ns        75645
+OrderBookFixture/DeleteOrders_JazzyVector/4096                   71088 ns        71089 ns         9844
+OrderBookFixture/DeleteOrders_JazzyVector/8192                  140704 ns       140691 ns         4970
+OrderBookFixture/DeleteOrders_JazzyVector_BigO                   17.21 N         17.21 N    
+OrderBookFixture/DeleteOrders_JazzyVector_RMS                        1 %             1 %    
+OrderBookFixture/MixedOps_JazzyVector/8                            425 ns          425 ns      1648568
+OrderBookFixture/MixedOps_JazzyVector/64                          3406 ns         3406 ns       205633
+OrderBookFixture/MixedOps_JazzyVector/512                        27944 ns        27944 ns        25057
+OrderBookFixture/MixedOps_JazzyVector/4096                      238070 ns       238069 ns         2910
+OrderBookFixture/MixedOps_JazzyVector/8192                      484363 ns       484364 ns         1429
+OrderBookFixture/MixedOps_JazzyVector_BigO                       58.91 N         58.91 N    
+OrderBookFixture/MixedOps_JazzyVector_RMS                            1 %             1 %    
+BM_VolumeLookup_JazzyVector/8                                     4.64 ns         4.64 ns    153257712
+BM_VolumeLookup_JazzyVector/64                                    37.0 ns         37.0 ns     18927257
+BM_VolumeLookup_JazzyVector/512                                    301 ns          301 ns      2329071
+BM_VolumeLookup_JazzyVector/4096                                  2373 ns         2373 ns       294902
+BM_VolumeLookup_JazzyVector/8192                                  4739 ns         4739 ns       147738
+BM_VolumeLookup_JazzyVector_BigO                                  0.58 N          0.58 N    
+BM_VolumeLookup_JazzyVector_RMS                                      0 %             0 %    
+BM_GetLevelSnapshot_JazzyVector/8                                 15.5 ns         15.5 ns     45312136
+BM_GetLevelSnapshot_JazzyVector/64                                 144 ns          144 ns      4854335
+BM_GetLevelSnapshot_JazzyVector/512                                144 ns          144 ns      4863374
+BM_GetLevelSnapshot_JazzyVector/4096                               144 ns          144 ns      4833186
+BM_GetLevelSnapshot_JazzyVector/8192                               144 ns          144 ns      4825623
+BM_GetLevelSnapshot_JazzyVector_BigO                             13.24 lgN       13.24 lgN  
+BM_GetLevelSnapshot_JazzyVector_RMS                                 30 %            30 %    
+OrderBookFixture/AddOrders_MapAggregate/8                          419 ns          419 ns      1675214
+OrderBookFixture/AddOrders_MapAggregate/64                        4110 ns         4110 ns       170623
+OrderBookFixture/AddOrders_MapAggregate/512                      28832 ns        28832 ns        24359
+OrderBookFixture/AddOrders_MapAggregate/4096                    216941 ns       216941 ns         3049
+OrderBookFixture/AddOrders_MapAggregate/8192                    431626 ns       431627 ns         1570
+OrderBookFixture/AddOrders_MapAggregate_BigO                     52.76 N         52.76 N    
+OrderBookFixture/AddOrders_MapAggregate_RMS                          1 %             1 %    
+BM_UpdateOrders_MapAggregate/8                                     237 ns          237 ns      2963477
+BM_UpdateOrders_MapAggregate/64                                   2032 ns         2032 ns       343033
+BM_UpdateOrders_MapAggregate/512                                 17929 ns        17929 ns        39038
+BM_UpdateOrders_MapAggregate/4096                               150559 ns       150559 ns         4649
+BM_UpdateOrders_MapAggregate/8192                               298798 ns       298799 ns         2369
+BM_UpdateOrders_MapAggregate_BigO                                36.53 N         36.53 N    
+BM_UpdateOrders_MapAggregate_RMS                                     1 %             1 %    
+OrderBookFixture/DeleteOrders_MapAggregate/8                       892 ns          894 ns       782893
+OrderBookFixture/DeleteOrders_MapAggregate/64                     3962 ns         3960 ns       176402
+OrderBookFixture/DeleteOrders_MapAggregate/512                   22327 ns        22324 ns        31358
+OrderBookFixture/DeleteOrders_MapAggregate/4096                 160938 ns       160945 ns         4341
+OrderBookFixture/DeleteOrders_MapAggregate/8192                 317562 ns       317574 ns         2203
+OrderBookFixture/DeleteOrders_MapAggregate_BigO                  38.89 N         38.89 N    
+OrderBookFixture/DeleteOrders_MapAggregate_RMS                       2 %             2 %    
+OrderBookFixture/MixedOps_MapAggregate/8                           486 ns          486 ns      1441486
+OrderBookFixture/MixedOps_MapAggregate/64                         4156 ns         4156 ns       168458
+OrderBookFixture/MixedOps_MapAggregate/512                       37660 ns        37660 ns        18595
+OrderBookFixture/MixedOps_MapAggregate/4096                     324385 ns       324384 ns         2132
+OrderBookFixture/MixedOps_MapAggregate/8192                     664558 ns       664559 ns         1076
+OrderBookFixture/MixedOps_MapAggregate_BigO                      80.71 N         80.71 N    
+OrderBookFixture/MixedOps_MapAggregate_RMS                           2 %             2 %    
+BM_VolumeLookup_MapAggregate/8                                    24.6 ns         24.6 ns     28052627
+BM_VolumeLookup_MapAggregate/64                                    427 ns          427 ns      1645282
+BM_VolumeLookup_MapAggregate/512                                  4624 ns         4624 ns       120409
+BM_VolumeLookup_MapAggregate/4096                                71164 ns        71164 ns         9725
+BM_VolumeLookup_MapAggregate/8192                               169542 ns       169543 ns         4119
+BM_VolumeLookup_MapAggregate_BigO                                 1.57 NlgN       1.57 NlgN 
+BM_VolumeLookup_MapAggregate_RMS                                     6 %             6 %    
+BM_GetLevelSnapshot_MapAggregate/8                                68.5 ns         68.5 ns      9482397
+BM_GetLevelSnapshot_MapAggregate/64                                602 ns          602 ns      1158154
+BM_GetLevelSnapshot_MapAggregate/512                               605 ns          605 ns      1152244
+BM_GetLevelSnapshot_MapAggregate/4096                              606 ns          606 ns      1152700
+BM_GetLevelSnapshot_MapAggregate/8192                              606 ns          606 ns      1154392
+BM_GetLevelSnapshot_MapAggregate_BigO                            55.61 lgN       55.61 lgN  
+BM_GetLevelSnapshot_MapAggregate_RMS                                30 %            30 %    
+BM_FrontOrderPeek_MapAggregate/8                                  68.2 ns         68.2 ns     10172349
+BM_FrontOrderPeek_MapAggregate/64                                  596 ns          596 ns      1193480
+BM_FrontOrderPeek_MapAggregate/512                                 607 ns          607 ns      1159152
+BM_FrontOrderPeek_MapAggregate/4096                                607 ns          607 ns      1152036
+BM_FrontOrderPeek_MapAggregate/8192                                606 ns          606 ns      1156031
+BM_FrontOrderPeek_MapAggregate_BigO                              55.62 lgN       55.62 lgN  
+BM_FrontOrderPeek_MapAggregate_RMS                                  29 %            29 %    
+BM_AddOrders_MapFifo/8                                             492 ns          492 ns      1432002
+BM_AddOrders_MapFifo/64                                           4684 ns         4684 ns       149184
+BM_AddOrders_MapFifo/512                                         36454 ns        36454 ns        19031
+BM_AddOrders_MapFifo/4096                                       275851 ns       275851 ns         2420
+BM_AddOrders_MapFifo/8192                                       567412 ns       567412 ns         1224
+BM_AddOrders_MapFifo_BigO                                        68.89 N         68.89 N    
+BM_AddOrders_MapFifo_RMS                                             2 %             2 %    
+BM_UpdateOrders_MapFifo/8                                         1351 ns         1351 ns       518204
+BM_UpdateOrders_MapFifo/64                                        4602 ns         4602 ns       151753
+BM_UpdateOrders_MapFifo/512                                      26540 ns        26539 ns        25360
+BM_UpdateOrders_MapFifo/4096                                    314980 ns       314980 ns         2223
+BM_UpdateOrders_MapFifo/8192                                    653155 ns       653156 ns         1046
+BM_UpdateOrders_MapFifo_BigO                                      6.18 NlgN       6.18 NlgN 
+BM_UpdateOrders_MapFifo_RMS                                          3 %             3 %    
+BM_GetLevelSnapshot_MapFifo/8                                     68.4 ns         68.4 ns     10178709
+BM_GetLevelSnapshot_MapFifo/64                                     595 ns          595 ns      1149086
+BM_GetLevelSnapshot_MapFifo/512                                    605 ns          605 ns      1156241
+BM_GetLevelSnapshot_MapFifo/4096                                   609 ns          609 ns      1156872
+BM_GetLevelSnapshot_MapFifo/8192                                   608 ns          608 ns      1160343
+BM_GetLevelSnapshot_MapFifo_BigO                                 55.66 lgN       55.66 lgN  
+BM_GetLevelSnapshot_MapFifo_RMS                                     29 %            29 %    
+BM_FrontOrderPeek_MapFifo/8                                       75.2 ns         75.2 ns      9175394
+BM_FrontOrderPeek_MapFifo/64                                       622 ns          622 ns      1122244
+BM_FrontOrderPeek_MapFifo/512                                      639 ns          639 ns      1107104
+BM_FrontOrderPeek_MapFifo/4096                                     639 ns          639 ns      1104223
+BM_FrontOrderPeek_MapFifo/8192                                     639 ns          639 ns      1094314
+BM_FrontOrderPeek_MapFifo_BigO                                   58.51 lgN       58.51 lgN  
+BM_FrontOrderPeek_MapFifo_RMS                                       29 %            29 %    
+FifoOrderBookFixture/AddOrders_JazzyVectorAggregate/8              297 ns          297 ns      2353709
+FifoOrderBookFixture/AddOrders_JazzyVectorAggregate/64            2372 ns         2372 ns       295661
+FifoOrderBookFixture/AddOrders_JazzyVectorAggregate/512          18817 ns        18817 ns        37100
+FifoOrderBookFixture/AddOrders_JazzyVectorAggregate/4096        150807 ns       150807 ns         4265
+FifoOrderBookFixture/AddOrders_JazzyVectorAggregate/8192        302590 ns       302591 ns         2153
+FifoOrderBookFixture/AddOrders_JazzyVectorAggregate_BigO         36.91 N         36.91 N    
+FifoOrderBookFixture/AddOrders_JazzyVectorAggregate_RMS              0 %             0 %    
+FifoOrderBookFixture/UpdateOrders_JazzyVectorAggregate/8           541 ns          541 ns      1291918
+FifoOrderBookFixture/UpdateOrders_JazzyVectorAggregate/64         3874 ns         3874 ns       180717
+FifoOrderBookFixture/UpdateOrders_JazzyVectorAggregate/512       28757 ns        28757 ns        24294
+FifoOrderBookFixture/UpdateOrders_JazzyVectorAggregate/4096     230413 ns       230413 ns         2821
+FifoOrderBookFixture/UpdateOrders_JazzyVectorAggregate/8192     465486 ns       465486 ns         1418
+FifoOrderBookFixture/UpdateOrders_JazzyVectorAggregate_BigO      56.71 N         56.71 N    
+FifoOrderBookFixture/UpdateOrders_JazzyVectorAggregate_RMS           1 %             1 %    
+FifoOrderBookFixture/MixedOps_JazzyVectorAggregate/8               422 ns          422 ns      1659173
+FifoOrderBookFixture/MixedOps_JazzyVectorAggregate/64             3380 ns         3380 ns       207698
+FifoOrderBookFixture/MixedOps_JazzyVectorAggregate/512           27788 ns        27789 ns        25277
+FifoOrderBookFixture/MixedOps_JazzyVectorAggregate/4096         237222 ns       237223 ns         2934
+FifoOrderBookFixture/MixedOps_JazzyVectorAggregate/8192         483086 ns       483086 ns         1438
+FifoOrderBookFixture/MixedOps_JazzyVectorAggregate_BigO          58.75 N         58.75 N    
+FifoOrderBookFixture/MixedOps_JazzyVectorAggregate_RMS               1 %             1 %    
+FifoOrderBookFixture/AddOrders_JazzyVectorFifo/8                   392 ns          392 ns      1783485
+FifoOrderBookFixture/AddOrders_JazzyVectorFifo/64                 3145 ns         3145 ns       222767
+FifoOrderBookFixture/AddOrders_JazzyVectorFifo/512               27465 ns        27464 ns        24835
+FifoOrderBookFixture/AddOrders_JazzyVectorFifo/4096             219949 ns       219948 ns         2824
+FifoOrderBookFixture/AddOrders_JazzyVectorFifo/8192             492056 ns       476750 ns         1325
+FifoOrderBookFixture/AddOrders_JazzyVectorFifo_BigO               4.60 NlgN       4.48 NlgN 
+FifoOrderBookFixture/AddOrders_JazzyVectorFifo_RMS                   3 %             2 %    
+FifoOrderBookFixture/UpdateOrders_JazzyVectorFifo/8                724 ns          724 ns       992950
+FifoOrderBookFixture/UpdateOrders_JazzyVectorFifo/64              5230 ns         5230 ns       135373
+FifoOrderBookFixture/UpdateOrders_JazzyVectorFifo/512            43501 ns        43477 ns        16153
+FifoOrderBookFixture/UpdateOrders_JazzyVectorFifo/4096          349620 ns       349620 ns         1872
+FifoOrderBookFixture/UpdateOrders_JazzyVectorFifo/8192        37157216 ns       786843 ns          987
+FifoOrderBookFixture/UpdateOrders_JazzyVectorFifo_BigO          288.45 NlgN       7.34 NlgN 
+FifoOrderBookFixture/UpdateOrders_JazzyVectorFifo_RMS               91 %             3 %    
+FifoOrderBookFixture/MixedOps_JazzyVectorFifo/8                    517 ns          517 ns      1284262
+FifoOrderBookFixture/MixedOps_JazzyVectorFifo/64                  4113 ns         4108 ns       168056
+FifoOrderBookFixture/MixedOps_JazzyVectorFifo/512                33160 ns        33160 ns        21083
+FifoOrderBookFixture/MixedOps_JazzyVectorFifo/4096              286442 ns       286442 ns         2401
+FifoOrderBookFixture/MixedOps_JazzyVectorFifo/8192              596064 ns       596064 ns         1234
+FifoOrderBookFixture/MixedOps_JazzyVectorFifo_BigO               72.17 N         72.17 N    
+FifoOrderBookFixture/MixedOps_JazzyVectorFifo_RMS                    3 %             3 %    
+BM_FrontOrderPeek_JazzyVectorFifo/8                               14.3 ns         14.3 ns     48787967
+BM_FrontOrderPeek_JazzyVectorFifo/64                               190 ns          190 ns      3684540
+BM_FrontOrderPeek_JazzyVectorFifo/512                              190 ns          190 ns      3684288
+BM_FrontOrderPeek_JazzyVectorFifo/4096                             190 ns          190 ns      3682699
+BM_FrontOrderPeek_JazzyVectorFifo/8192                             190 ns          190 ns      3682040
+BM_FrontOrderPeek_JazzyVectorFifo_BigO                           17.42 lgN       17.42 lgN  
+BM_FrontOrderPeek_JazzyVectorFifo_RMS                               31 %            31 %    
