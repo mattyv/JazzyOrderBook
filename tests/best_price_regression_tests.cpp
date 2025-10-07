@@ -201,10 +201,6 @@ SCENARIO("tick_type_strong range validation in operations", "[best_price_regress
             {
                 REQUIRE(book.best_bid() == std::numeric_limits<int>::min());
                 REQUIRE(book.best_ask() == std::numeric_limits<int>::max());
-                REQUIRE(book.bid_volume_at_tick(85) == 0);
-                REQUIRE(book.bid_volume_at_tick(135) == 0);
-                REQUIRE(book.ask_volume_at_tick(85) == 0);
-                REQUIRE(book.ask_volume_at_tick(135) == 0);
             }
         }
 

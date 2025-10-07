@@ -87,4 +87,25 @@ constexpr detail::order_tick_getter order_tick_getter;
 constexpr detail::order_volume_setter order_volume_setter;
 constexpr detail::order_tick_setter order_tick_setter;
 
+// Forward declare storage policies
+namespace detail {
+template <typename OrderType>
+struct aggregate_level_storage;
+
+template <typename OrderType>
+struct fifo_level_storage;
+} // namespace detail
+
+// Type trait to detect if a storage policy supports FIFO
+template <typename T>
+struct is_fifo_storage : std::false_type
+{};
+
+template <typename OrderType>
+struct is_fifo_storage<detail::fifo_level_storage<OrderType>> : std::true_type
+{};
+
+template <typename T>
+inline constexpr bool is_fifo_storage_v = is_fifo_storage<T>::value;
+
 } // namespace jazzy

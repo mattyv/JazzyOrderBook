@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <cstdint>
@@ -7,15 +8,21 @@
 #include <jazzy/types.hpp>
 
 #include <memory_resource>
+#include <optional>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
 #include <jazzy/detail/level_bitmap.hpp>
+#include <jazzy/detail/level_storage.hpp>
 
 namespace jazzy {
 
-template <typename TickType, typename OrderType, typename MarketStats>
+template <
+    typename TickType,
+    typename OrderType,
+    typename MarketStats,
+    typename LevelStorage = detail::aggregate_level_storage<OrderType>>
 requires tick<TickType> && order<OrderType> && market_stats<MarketStats> &&
     std::same_as<typename MarketStats::tick_type, TickType>
 class order_book
@@ -25,29 +32,70 @@ class order_book
     using base_type = TickType;
     using id_type = order_id_type<order_type>;
     using volume_type = order_volume_type<order_type>;
+    using level_storage_type = LevelStorage;
 
     static constexpr tick_type NO_BID_VALUE = std::numeric_limits<tick_type>::min();
     static constexpr tick_type NO_ASK_VALUE = std::numeric_limits<tick_type>::max();
+    static constexpr bool is_fifo_enabled = is_fifo_storage_v<level_storage_type>;
 
     struct level
     {
         volume_type volume{};
+        [[no_unique_address]] level_storage_type storage;
 
         // Default constructor
         level() = default;
 
         // Copy and move constructors with proper noexcept specifications
         level(const level&) = default;
-        level(level&&) noexcept(std::is_nothrow_move_constructible_v<volume_type>) = default;
+        level(level&&) noexcept(
+            std::is_nothrow_move_constructible_v<volume_type> && std::is_nothrow_move_constructible_v<level_storage_type>) =
+            default;
         level& operator=(const level&) = default;
-        level& operator=(level&&) noexcept(std::is_nothrow_move_assignable_v<volume_type>) = default;
+        level& operator=(level&&) noexcept(
+            std::is_nothrow_move_assignable_v<volume_type> && std::is_nothrow_move_assignable_v<level_storage_type>) =
+            default;
+
+        level(std::pmr::memory_resource* resource)
+        requires is_fifo_enabled
+            : storage(resource)
+        {}
     };
 
 public:
     using value_type = OrderType;
     using size_type = size_t;
+
 private:
     using tick_type_strong = typename MarketStats::tick_type_strong_t;
+
+    // When FIFO is enabled, we need to track where each order lives in the deque
+    using queue_iterator = std::conditional_t<
+        is_fifo_enabled,
+        typename level_storage_type::queue_iterator,
+        void*>;
+
+    // Use EBO to guarantee zero overhead for aggregate-only orderbooks
+    // Empty base for aggregate-only mode
+    struct order_data_empty_base
+    {};
+
+    // Non-empty base for FIFO mode
+    struct order_data_fifo_base
+    {
+        std::optional<queue_iterator> queue_it;
+    };
+
+    // Each order gets stored with an optional iterator back to its position in the FIFO queue
+    // This lets us remove it from the queue in O(1) time when needed
+    struct order_data : std::conditional_t<is_fifo_enabled, order_data_fifo_base, order_data_empty_base>
+    {
+        order_type order;
+
+        order_data() = default;
+        explicit order_data(order_type&& o) : order(std::move(o)) {}
+        explicit order_data(const order_type& o) : order(o) {}
+    };
 
     static constexpr size_type calculate_size(
         const tick_type_strong& daily_high, const tick_type_strong& daily_low, double expected_range)
@@ -117,7 +165,7 @@ private:
 
     using bid_storage = std::pmr::vector<level>;
     using ask_storage = std::pmr::vector<level>;
-    using order_storage = std::pmr::unordered_map<id_type, order_type, std::hash<id_type>, std::equal_to<id_type>>;
+    using order_storage = std::pmr::unordered_map<id_type, order_data, std::hash<id_type>, std::equal_to<id_type>>;
 
 public:
     using bitset_type = detail::level_bitmap<calculate_size(
@@ -131,16 +179,31 @@ public:
         , orders_(resource)
         , resource_(resource)
     {
-        bids_.resize(size_);
-        asks_.resize(size_);
+        if constexpr (is_fifo_enabled)
+        {
+            bids_.reserve(size_);
+            asks_.reserve(size_);
+            for (size_type idx = 0; idx < size_; ++idx)
+            {
+                bids_.emplace_back(resource_);
+                asks_.emplace_back(resource_);
+            }
+        }
+        else
+        {
+            bids_.resize(size_);
+            asks_.resize(size_);
+        }
         orders_.reserve(size_ * 10); // Arbitrary factor to reduce rehashing
     }
 
     ~order_book() = default;
 
     order_book(const order_book& other)
-        : order_book(other, other.resource_)
-    {}
+        : order_book(other.resource_)
+    {
+        clone_from(other);
+    }
 
     order_book(order_book&& other) noexcept
         : best_bid_(std::move(other.best_bid_))
@@ -157,8 +220,7 @@ public:
     {
         if (this != &other)
         {
-            order_book temp(other, resource_);
-            swap(temp);
+            clone_from(other);
         }
         return *this;
     }
@@ -180,15 +242,10 @@ public:
     }
 
     order_book(const order_book& other, std::pmr::memory_resource* resource)
-        : best_bid_(other.best_bid_)
-        , best_ask_(other.best_ask_)
-        , bid_bitmap_(other.bid_bitmap_)
-        , ask_bitmap_(other.ask_bitmap_)
-        , bids_(other.bids_, resource)
-        , asks_(other.asks_, resource)
-        , orders_(other.orders_, resource)
-        , resource_(resource)
-    {}
+        : order_book(resource)
+    {
+        clone_from(other);
+    }
 
     void swap(order_book& other) noexcept
     {
@@ -209,20 +266,28 @@ public:
     requires order<U> && std::same_as<order_type, std::decay_t<U>>
     void insert_bid(tick_type tick_value, U&& order)
     {
-        // wrap in strong type to avoid accidental misuse
         tick_type_strong tick_strong{tick_value};
         if (tick_strong > MarketStats::daily_high_v || tick_strong < MarketStats::daily_low_v)
-            return; // Ignore out of range bids
+            return;
 
         auto volume = order_volume_getter(order);
-        auto [it, succ] = orders_.try_emplace(order_id_getter(order), std::forward<U>(order));
+        auto order_id = order_id_getter(order);
+        auto [it, succ] = orders_.try_emplace(order_id, order_data{std::forward<U>(order)});
 
         assert(succ && "Order ID already exists");
 
-        order_tick_setter(it->second, tick_strong.value());
+        order_tick_setter(it->second.order, tick_strong.value());
 
         size_type index = tick_to_index(tick_strong);
         bids_[index].volume += volume;
+
+        // If FIFO is enabled, add this order to the back of the queue for this price level
+        if constexpr (is_fifo_enabled)
+        {
+            bids_[index].storage.orders.push_back(order_id);
+            auto queue_it = std::prev(bids_[index].storage.orders.end());
+            it->second.queue_it = queue_it;
+        }
 
         if (!best_bid_.has_value() || tick_strong > best_bid_)
             best_bid_ = tick_strong;
@@ -236,17 +301,26 @@ public:
     {
         tick_type_strong tick_strong{tick_value};
         if (tick_strong > MarketStats::daily_high_v || tick_strong < MarketStats::daily_low_v)
-            return; // Ignore out of range asks
+            return;
 
         auto volume = order_volume_getter(order);
-        auto [it, succ] = orders_.try_emplace(order_id_getter(order), std::forward<U>(order));
+        auto order_id = order_id_getter(order);
+        auto [it, succ] = orders_.try_emplace(order_id, order_data{std::forward<U>(order)});
 
         assert(succ && "Order ID already exists");
 
-        order_tick_setter(it->second, tick_strong.value());
+        order_tick_setter(it->second.order, tick_strong.value());
 
         size_type index = tick_to_index(tick_strong);
         asks_[index].volume += volume;
+
+        // If FIFO is enabled, add this order to the back of the queue for this price level
+        if constexpr (is_fifo_enabled)
+        {
+            asks_[index].storage.orders.push_back(order_id);
+            auto queue_it = std::prev(asks_[index].storage.orders.end());
+            it->second.queue_it = queue_it;
+        }
 
         if (!best_ask_.has_value() || tick_strong < best_ask_)
             best_ask_ = tick_strong;
@@ -259,23 +333,22 @@ public:
     void update_bid(tick_type tick_value, U&& order)
     {
         tick_type_strong tick_strong{tick_value};
-        // ignore out of range bids
         if (tick_strong > MarketStats::daily_high_v || tick_strong < MarketStats::daily_low_v)
             return;
 
-        auto it = orders_.find(order_id_getter(order));
+        auto order_id = order_id_getter(order);
+        auto it = orders_.find(order_id);
         assert(it != orders_.end());
 
-        auto original_tick = tick_type_strong(order_tick_getter(it->second));
-        auto original_volume = order_volume_getter(it->second);
+        auto original_tick = tick_type_strong(order_tick_getter(it->second.order));
+        auto original_volume = order_volume_getter(it->second.order);
         auto supplied_volume = order_volume_getter(order);
 
-        // Early exit for no-op updates
         if (tick_strong == original_tick && supplied_volume == original_volume)
             return;
 
-        order_volume_setter(it->second, supplied_volume);
-        order_tick_setter(it->second, tick_strong.value());
+        order_volume_setter(it->second.order, supplied_volume);
+        order_tick_setter(it->second.order, tick_strong.value());
 
         if (tick_strong == original_tick)
         {
@@ -285,7 +358,19 @@ public:
             const bool has_volume = bids_[index].volume != 0;
             update_bitsets<true>(has_volume, index);
 
-            // Only scan if we might have removed the best bid
+            // If volume increased, move order to back of the queue (lose priority)
+            if constexpr (is_fifo_enabled)
+            {
+                if (volume_delta > 0)
+                {
+                    auto queue_it = it->second.queue_it.value();
+                    bids_[index].storage.orders.erase(queue_it);
+                    bids_[index].storage.orders.push_back(order_id);
+                    it->second.queue_it = std::prev(bids_[index].storage.orders.end());
+                }
+                // If volume decreased, keep position in queue
+            }
+
             if (volume_delta < 0 && original_tick == best_bid_ && !has_volume)
             {
                 best_bid_ = scan_for_best_bid();
@@ -297,11 +382,24 @@ public:
             bids_[old_index].volume -= original_volume;
             update_bitsets<true>(bids_[old_index].volume != 0, old_index);
 
+            // Remove from old price level's queue
+            if constexpr (is_fifo_enabled)
+            {
+                auto queue_it = it->second.queue_it.value();
+                bids_[old_index].storage.orders.erase(queue_it);
+            }
+
             size_type new_index = tick_to_index(tick_strong);
             bids_[new_index].volume += supplied_volume;
             update_bitsets<true>(true, new_index);
 
-            // Update best_bid if needed
+            // Add to new price level's queue
+            if constexpr (is_fifo_enabled)
+            {
+                bids_[new_index].storage.orders.push_back(order_id);
+                it->second.queue_it = std::prev(bids_[new_index].storage.orders.end());
+            }
+
             if (tick_strong > best_bid_)
             {
                 best_bid_ = tick_strong;
@@ -319,21 +417,21 @@ public:
     {
         tick_type_strong tick_strong{tick_value};
         if (tick_strong > MarketStats::daily_high_v || tick_strong < MarketStats::daily_low_v)
-            return; // Ignore out of range asks
+            return;
 
-        auto it = orders_.find(order_id_getter(order));
+        auto order_id = order_id_getter(order);
+        auto it = orders_.find(order_id);
         assert(it != orders_.end());
 
-        auto original_tick = tick_type_strong(order_tick_getter(it->second));
-        auto original_volume = order_volume_getter(it->second);
+        auto original_tick = tick_type_strong(order_tick_getter(it->second.order));
+        auto original_volume = order_volume_getter(it->second.order);
         auto supplied_volume = order_volume_getter(order);
 
-        // Early exit for no-op updates
         if (tick_strong == original_tick && supplied_volume == original_volume)
             return;
 
-        order_volume_setter(it->second, supplied_volume);
-        order_tick_setter(it->second, tick_strong.value());
+        order_volume_setter(it->second.order, supplied_volume);
+        order_tick_setter(it->second.order, tick_strong.value());
 
         if (tick_strong == original_tick)
         {
@@ -343,7 +441,19 @@ public:
             const bool has_volume = asks_[index].volume != 0;
             update_bitsets<false>(has_volume, index);
 
-            // Only scan if we might have removed the best ask
+            // If volume increased, move order to back of the queue (lose priority)
+            if constexpr (is_fifo_enabled)
+            {
+                if (volume_delta > 0)
+                {
+                    auto queue_it = it->second.queue_it.value();
+                    asks_[index].storage.orders.erase(queue_it);
+                    asks_[index].storage.orders.push_back(order_id);
+                    it->second.queue_it = std::prev(asks_[index].storage.orders.end());
+                }
+                // If volume decreased, keep position in queue
+            }
+
             if (volume_delta < 0 && original_tick == best_ask_ && !has_volume)
             {
                 best_ask_ = scan_for_best_ask();
@@ -355,11 +465,24 @@ public:
             asks_[old_index].volume -= original_volume;
             update_bitsets<false>(asks_[old_index].volume != 0, old_index);
 
+            // Remove from old price level's queue
+            if constexpr (is_fifo_enabled)
+            {
+                auto queue_it = it->second.queue_it.value();
+                asks_[old_index].storage.orders.erase(queue_it);
+            }
+
             size_type new_index = tick_to_index(tick_strong);
             asks_[new_index].volume += supplied_volume;
             update_bitsets<false>(true, new_index);
 
-            // Update best_ask if needed
+            // Add to new price level's queue
+            if constexpr (is_fifo_enabled)
+            {
+                asks_[new_index].storage.orders.push_back(order_id);
+                it->second.queue_it = std::prev(asks_[new_index].storage.orders.end());
+            }
+
             if (tick_strong < best_ask_)
             {
                 best_ask_ = tick_strong;
@@ -376,22 +499,27 @@ public:
     void remove_bid(tick_type tick_value, U&& order)
     {
         tick_type_strong tick_strong{tick_value};
-        // Ignore out of range bids
         if (tick_strong > MarketStats::daily_high_v || tick_strong < MarketStats::daily_low_v)
             return;
 
         auto it = orders_.find(order_id_getter(order));
         assert(it != orders_.end());
 
-        auto original_volume = order_volume_getter(it->second);
-
-        assert(it != orders_.end());
-        orders_.erase(it);
+        auto original_volume = order_volume_getter(it->second.order);
 
         size_type index = tick_to_index(tick_strong);
+
+        // Remove from FIFO queue before erasing from map
+        if constexpr (is_fifo_enabled)
+        {
+            auto queue_it = it->second.queue_it.value();
+            bids_[index].storage.orders.erase(queue_it);
+        }
+
+        orders_.erase(it);
+
         bids_[index].volume -= original_volume;
 
-        // update best_bid_ if needed
         if (bids_[index].volume == 0)
         {
             update_bitsets<true>(false, index);
@@ -407,22 +535,27 @@ public:
     void remove_ask(tick_type tick_value, U&& order)
     {
         tick_type_strong tick_strong{tick_value};
-        // Ignore out of range asks
         if (tick_strong > MarketStats::daily_high_v || tick_strong < MarketStats::daily_low_v)
             return;
 
         auto it = orders_.find(order_id_getter(order));
         assert(it != orders_.end());
 
-        auto original_volume = order_volume_getter(it->second);
-
-        assert(it != orders_.end());
-        orders_.erase(it);
+        auto original_volume = order_volume_getter(it->second.order);
 
         size_type index = tick_to_index(tick_strong);
+
+        // Remove from FIFO queue before erasing from map
+        if constexpr (is_fifo_enabled)
+        {
+            auto queue_it = it->second.queue_it.value();
+            asks_[index].storage.orders.erase(queue_it);
+        }
+
+        orders_.erase(it);
+
         asks_[index].volume -= original_volume;
 
-        // update best_ask_ if needed
         if (asks_[index].volume == 0)
         {
             update_bitsets<false>(false, index);
@@ -438,7 +571,7 @@ public:
         auto it = orders_.find(id);
         if (it != orders_.end())
         {
-            return it->second;
+            return it->second.order;
         }
         throw std::out_of_range("Order ID not found");
     }
@@ -446,8 +579,7 @@ public:
     volume_type bid_volume_at_tick(tick_type tick_value)
     {
         tick_type_strong tick_strong{tick_value};
-        if (tick_strong > MarketStats::daily_high_v || tick_strong < MarketStats::daily_low_v)
-            return 0; // Out of range bids have zero volume
+        assert(tick_strong <= MarketStats::daily_high_v && tick_strong >= MarketStats::daily_low_v);
 
         size_type index = tick_to_index(tick_strong);
         return bids_[index].volume;
@@ -456,8 +588,7 @@ public:
     volume_type ask_volume_at_tick(tick_type tick_value)
     {
         tick_type_strong tick_strong{tick_value};
-        if (tick_strong > MarketStats::daily_high_v || tick_strong < MarketStats::daily_low_v)
-            return 0; // Out of range asks have zero volume
+        assert(tick_strong <= MarketStats::daily_high_v && tick_strong >= MarketStats::daily_low_v);
 
         size_type index = tick_to_index(tick_strong);
         return asks_[index].volume;
@@ -546,6 +677,67 @@ public:
 
     [[nodiscard]] std::pmr::memory_resource* get_memory_resource() const noexcept { return resource_; }
 
+    void clear() noexcept
+    {
+        orders_.clear();
+        best_bid_ = tick_type_strong::no_value();
+        best_ask_ = tick_type_strong::no_value();
+
+        // Clear all levels - simpler than iterating bitmap
+        for (size_t i = 0; i < size_; ++i)
+        {
+            if (bids_[i].volume != 0)
+            {
+                bids_[i].volume = 0;
+                if constexpr (is_fifo_enabled)
+                {
+                    bids_[i].storage.orders.clear();
+                }
+                bid_bitmap_.set(i, false);
+            }
+            if (asks_[i].volume != 0)
+            {
+                asks_[i].volume = 0;
+                if constexpr (is_fifo_enabled)
+                {
+                    asks_[i].storage.orders.clear();
+                }
+                ask_bitmap_.set(i, false);
+            }
+        }
+    }
+
+    // FIFO-specific functions: only available when FIFO storage is enabled
+    [[nodiscard]] order_type front_order_at_bid_level(size_type level) const
+    requires is_fifo_enabled
+    {
+        assert(level < size_);
+        assert(best_bid_.has_value());
+
+        assert(level < static_cast<size_type>(bid_bitmap_.count()));
+
+        const size_t index = bid_bitmap_.select_from_high(static_cast<size_t>(level));
+        const auto& queue = bids_[index].storage.orders;
+        assert(!queue.empty() && "No orders at this price level");
+
+        return get_order(queue.front());
+    }
+
+    [[nodiscard]] order_type front_order_at_ask_level(size_type level) const
+    requires is_fifo_enabled
+    {
+        assert(level < size_);
+        assert(best_ask_.has_value());
+
+        assert(level < static_cast<size_type>(ask_bitmap_.count()));
+
+        const size_t index = ask_bitmap_.select_from_low(static_cast<size_t>(level));
+        const auto& queue = asks_[index].storage.orders;
+        assert(!queue.empty() && "No orders at this price level");
+
+        return get_order(queue.front());
+    }
+
     constexpr size_type tick_to_index(const tick_type_strong& tick_value) const
     {
         const auto tick_val = static_cast<std::int64_t>(tick_value.value());
@@ -589,6 +781,89 @@ public:
         {
             ask_bitmap_.set(index, on);
         }
+    }
+
+    template <typename LevelContainer>
+    void copy_levels_from(const LevelContainer& source, LevelContainer& target)
+    {
+        target.clear();
+        target.reserve(source.size());
+        for (const auto& src_level : source)
+        {
+            if constexpr (is_fifo_enabled)
+            {
+                target.emplace_back(resource_);
+            }
+            else
+            {
+                target.emplace_back();
+            }
+
+            auto& dst_level = target.back();
+            dst_level.volume = src_level.volume;
+
+            if constexpr (is_fifo_enabled)
+            {
+                auto& dst_queue = dst_level.storage.orders;
+                for (const auto& order_id : src_level.storage.orders)
+                {
+                    dst_queue.push_back(order_id);
+                }
+            }
+        }
+
+        assert(target.size() == source.size());
+    }
+
+    void clone_from(const order_book& other)
+    {
+        best_bid_ = other.best_bid_;
+        best_ask_ = other.best_ask_;
+        bid_bitmap_ = other.bid_bitmap_;
+        ask_bitmap_ = other.ask_bitmap_;
+
+        copy_levels_from(other.bids_, bids_);
+        copy_levels_from(other.asks_, asks_);
+
+        orders_.clear();
+        const size_type desired_capacity = std::max<size_type>(size_ * 10, other.orders_.size());
+        orders_.reserve(desired_capacity);
+        for (const auto& [id, data] : other.orders_)
+        {
+            auto [it, inserted] = orders_.emplace(id, order_data{data.order});
+            assert(inserted);
+            static_cast<void>(inserted);
+        }
+
+        if constexpr (is_fifo_enabled)
+        {
+            rebuild_fifo_queue_links();
+        }
+    }
+
+    void rebuild_fifo_queue_links()
+    requires is_fifo_enabled
+    {
+        for (auto& [id, data] : orders_)
+        {
+            static_cast<void>(id);
+            data.queue_it.reset();
+        }
+
+        auto relink_levels = [this](auto& levels) {
+            for (auto& level : levels)
+            {
+                for (auto queue_it = level.storage.orders.begin(); queue_it != level.storage.orders.end(); ++queue_it)
+                {
+                    auto order_entry = orders_.find(*queue_it);
+                    assert(order_entry != orders_.end());
+                    order_entry->second.queue_it = queue_it;
+                }
+            }
+        };
+
+        relink_levels(bids_);
+        relink_levels(asks_);
     }
 
     static constexpr size_type size_ =

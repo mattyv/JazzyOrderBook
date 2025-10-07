@@ -4,6 +4,8 @@
 #include <jazzy/traits.hpp>
 #include <jazzy/types.hpp>
 
+#include <limits>
+#include <list>
 #include <map>
 #include <unordered_map>
 
@@ -12,7 +14,7 @@ namespace jazzy { namespace benchmarks {
 template <typename TickType, typename OrderType, typename MarketStats>
 requires tick<TickType> && order<OrderType> && market_stats<MarketStats> &&
     std::same_as<typename MarketStats::tick_type, TickType>
-class map_order_book
+class fifo_map_order_book
 {
     using order_type = OrderType;
     using tick_type = TickType;
@@ -26,18 +28,29 @@ class map_order_book
     struct level
     {
         volume_type volume{};
+        std::list<id_type> fifo;
+    };
+
+    using queue_iterator = typename std::list<id_type>::iterator;
+
+    struct order_data
+    {
+        order_type order{};
+        queue_iterator queue_it{};
+        bool has_queue_it{false};
+        bool is_bid{false};
     };
 
 private:
     using bid_storage = std::map<tick_type, level, std::greater<tick_type>>;
     using ask_storage = std::map<tick_type, level, std::less<tick_type>>;
-    using order_storage = std::unordered_map<id_type, order_type>;
+    using order_storage = std::unordered_map<id_type, order_data>;
 
 public:
     using value_type = OrderType;
     using size_type = size_t;
 
-    map_order_book()
+    fifo_map_order_book()
     {
         constexpr size_t estimated_levels =
             static_cast<size_t>(MarketStats::daily_high_v.value() - MarketStats::daily_low_v.value());
@@ -51,13 +64,22 @@ public:
         if (tick_value > MarketStats::daily_high_v.value() || tick_value < MarketStats::daily_low_v.value())
             return; // Ignore out of range bids
 
-        auto [it, succ] = orders_.try_emplace(order_id_getter(order), order);
+        const auto order_id = order_id_getter(order);
+        auto [it, succ] = orders_.try_emplace(order_id);
 
         assert(succ);
 
-        order_tick_setter(it->second, tick_value);
+        auto& stored_order = it->second;
+        stored_order.order = order;
+        stored_order.is_bid = true;
 
-        bids_[tick_value].volume += order_volume_getter(order);
+        auto [level_it, _] = bids_.try_emplace(tick_value);
+        auto& level = level_it->second;
+        level.volume += order_volume_getter(order);
+        stored_order.queue_it = level.fifo.insert(level.fifo.end(), order_id);
+        stored_order.has_queue_it = true;
+
+        order_tick_setter(stored_order.order, tick_value);
 
         best_bid_ = std::max(best_bid_, tick_value);
     }
@@ -69,13 +91,22 @@ public:
         if (tick_value > MarketStats::daily_high_v.value() || tick_value < MarketStats::daily_low_v.value())
             return; // Ignore out of range asks
 
-        auto [it, succ] = orders_.try_emplace(order_id_getter(order), order);
+        const auto order_id = order_id_getter(order);
+        auto [it, succ] = orders_.try_emplace(order_id);
 
         assert(succ);
 
-        order_tick_setter(it->second, tick_value);
+        auto& stored_order = it->second;
+        stored_order.order = order;
+        stored_order.is_bid = false;
 
-        asks_[tick_value].volume += order_volume_getter(order);
+        auto [level_it, _] = asks_.try_emplace(tick_value);
+        auto& level = level_it->second;
+        level.volume += order_volume_getter(order);
+        stored_order.queue_it = level.fifo.insert(level.fifo.end(), order_id);
+        stored_order.has_queue_it = true;
+
+        order_tick_setter(stored_order.order, tick_value);
 
         best_ask_ = std::min(best_ask_, tick_value);
     }
@@ -88,27 +119,50 @@ public:
         if (tick_value > MarketStats::daily_high_v.value() || tick_value < MarketStats::daily_low_v.value())
             return;
 
-        auto it = orders_.find(order_id_getter(order));
+        const auto order_id = order_id_getter(order);
+        auto it = orders_.find(order_id);
         assert(it != orders_.end());
 
-        auto original_tick = order_tick_getter(it->second);
-        auto original_volume = order_volume_getter(it->second);
+        auto& stored_order = it->second;
+        assert(stored_order.is_bid);
+
+        auto original_tick = order_tick_getter(stored_order.order);
+        auto original_volume = order_volume_getter(stored_order.order);
         auto supplied_volume = order_volume_getter(order);
 
-        order_volume_setter(it->second, supplied_volume);
-        order_tick_setter(it->second, tick_value);
+        // Save queue iterator before any modifications
+        const bool had_queue_it = stored_order.has_queue_it;
+        const auto saved_queue_it = stored_order.queue_it;
+
+        order_volume_setter(stored_order.order, supplied_volume);
+        order_tick_setter(stored_order.order, tick_value);
 
         if (tick_value == original_tick)
         {
             auto volume_delta = supplied_volume - original_volume;
-            bids_[tick_value].volume += volume_delta;
+            auto level_it = bids_.find(tick_value);
+            assert(level_it != bids_.end());
+            auto& level = level_it->second;
+            level.volume += volume_delta;
+
+            // If volume becomes zero, remove from queue
+            if (supplied_volume == 0 && had_queue_it)
+            {
+                level.fifo.erase(saved_queue_it);
+                stored_order.has_queue_it = false;
+            }
+            // If volume increased, move order to back of the queue (lose priority)
+            else if (volume_delta > 0 && had_queue_it)
+            {
+                level.fifo.erase(saved_queue_it);
+                stored_order.queue_it = level.fifo.insert(level.fifo.end(), order_id);
+            }
+            // If volume decreased (but not to zero), keep position in queue
 
             // Remove level if volume reaches zero
-            if (bids_[tick_value].volume == 0)
+            if (level.volume == 0)
             {
-                bids_.erase(tick_value);
-
-                // Update best bid if needed
+                bids_.erase(level_it);
                 if (original_tick == best_bid_)
                 {
                     best_bid_ = find_best_bid();
@@ -118,14 +172,26 @@ public:
         else
         {
             // Remove volume from old level
-            bids_[original_tick].volume -= original_volume;
-            if (bids_[original_tick].volume == 0)
+            auto level_it = bids_.find(original_tick);
+            assert(level_it != bids_.end());
+            auto& current_level = level_it->second;
+            current_level.volume -= original_volume;
+            if (had_queue_it)
             {
-                bids_.erase(original_tick);
+                current_level.fifo.erase(saved_queue_it);
+                stored_order.has_queue_it = false;
+            }
+            if (current_level.volume == 0)
+            {
+                bids_.erase(level_it);
             }
 
             // Add volume to new level
-            bids_[tick_value].volume += supplied_volume;
+            auto [new_level_it, _] = bids_.try_emplace(tick_value);
+            auto& new_level = new_level_it->second;
+            new_level.volume += supplied_volume;
+            stored_order.queue_it = new_level.fifo.insert(new_level.fifo.end(), order_id);
+            stored_order.has_queue_it = true;
 
             // Update best_bid if needed
             if (tick_value > best_bid_)
@@ -146,27 +212,50 @@ public:
         if (tick_value > MarketStats::daily_high_v.value() || tick_value < MarketStats::daily_low_v.value())
             return; // Ignore out of range asks
 
-        auto it = orders_.find(order_id_getter(order));
+        const auto order_id = order_id_getter(order);
+        auto it = orders_.find(order_id);
         assert(it != orders_.end());
 
-        auto original_tick = order_tick_getter(it->second);
-        auto original_volume = order_volume_getter(it->second);
+        auto& stored_order = it->second;
+        assert(!stored_order.is_bid);
+
+        auto original_tick = order_tick_getter(stored_order.order);
+        auto original_volume = order_volume_getter(stored_order.order);
         auto supplied_volume = order_volume_getter(order);
 
-        order_volume_setter(it->second, supplied_volume);
-        order_tick_setter(it->second, tick_value);
+        // Save queue iterator before any modifications
+        const bool had_queue_it = stored_order.has_queue_it;
+        const auto saved_queue_it = stored_order.queue_it;
+
+        order_volume_setter(stored_order.order, supplied_volume);
+        order_tick_setter(stored_order.order, tick_value);
 
         if (tick_value == original_tick)
         {
             auto volume_delta = supplied_volume - original_volume;
-            asks_[tick_value].volume += volume_delta;
+            auto level_it = asks_.find(tick_value);
+            assert(level_it != asks_.end());
+            auto& level = level_it->second;
+            level.volume += volume_delta;
+
+            // If volume becomes zero, remove from queue
+            if (supplied_volume == 0 && had_queue_it)
+            {
+                level.fifo.erase(saved_queue_it);
+                stored_order.has_queue_it = false;
+            }
+            // If volume increased, move order to back of the queue (lose priority)
+            else if (volume_delta > 0 && had_queue_it)
+            {
+                level.fifo.erase(saved_queue_it);
+                stored_order.queue_it = level.fifo.insert(level.fifo.end(), order_id);
+            }
+            // If volume decreased (but not to zero), keep position in queue
 
             // Remove level if volume reaches zero
-            if (asks_[tick_value].volume == 0)
+            if (level.volume == 0)
             {
-                asks_.erase(tick_value);
-
-                // Update best ask if needed
+                asks_.erase(level_it);
                 if (original_tick == best_ask_)
                 {
                     best_ask_ = find_best_ask();
@@ -176,14 +265,26 @@ public:
         else
         {
             // Remove volume from old level
-            asks_[original_tick].volume -= original_volume;
-            if (asks_[original_tick].volume == 0)
+            auto level_it = asks_.find(original_tick);
+            assert(level_it != asks_.end());
+            auto& current_level = level_it->second;
+            current_level.volume -= original_volume;
+            if (had_queue_it)
             {
-                asks_.erase(original_tick);
+                current_level.fifo.erase(saved_queue_it);
+                stored_order.has_queue_it = false;
+            }
+            if (current_level.volume == 0)
+            {
+                asks_.erase(level_it);
             }
 
             // Add volume to new level
-            asks_[tick_value].volume += supplied_volume;
+            auto [new_level_it, _] = asks_.try_emplace(tick_value);
+            auto& new_level = new_level_it->second;
+            new_level.volume += supplied_volume;
+            stored_order.queue_it = new_level.fifo.insert(new_level.fifo.end(), order_id);
+            stored_order.has_queue_it = true;
 
             // Update best_ask if needed
             if (tick_value < best_ask_)
@@ -208,19 +309,37 @@ public:
         auto it = orders_.find(order_id_getter(order));
         assert(it != orders_.end());
 
-        auto original_volume = order_volume_getter(it->second);
+        auto& stored_order = it->second;
+        assert(stored_order.is_bid);
+        auto original_volume = order_volume_getter(stored_order.order);
+        const bool had_queue_it = stored_order.has_queue_it;
+        queue_iterator queue_it = stored_order.queue_it;
         orders_.erase(it);
 
-        bids_[tick_value].volume -= original_volume;
-        if (bids_[tick_value].volume == 0)
+        auto level_it = bids_.find(tick_value);
+        if (level_it != bids_.end())
         {
-            bids_.erase(tick_value);
-
-            // Update best bid if needed
-            if (tick_value == best_bid_)
+            auto& level = level_it->second;
+            level.volume -= original_volume;
+            if (had_queue_it)
             {
-                best_bid_ = find_best_bid();
+                level.fifo.erase(queue_it);
             }
+
+            if (level.volume == 0)
+            {
+                bids_.erase(level_it);
+
+                // Update best bid if needed
+                if (tick_value == best_bid_)
+                {
+                    best_bid_ = find_best_bid();
+                }
+            }
+        }
+        else if (tick_value == best_bid_)
+        {
+            best_bid_ = find_best_bid();
         }
     }
 
@@ -235,19 +354,37 @@ public:
         auto it = orders_.find(order_id_getter(order));
         assert(it != orders_.end());
 
-        auto original_volume = order_volume_getter(it->second);
+        auto& stored_order = it->second;
+        assert(!stored_order.is_bid);
+        auto original_volume = order_volume_getter(stored_order.order);
+        const bool had_queue_it = stored_order.has_queue_it;
+        queue_iterator queue_it = stored_order.queue_it;
         orders_.erase(it);
 
-        asks_[tick_value].volume -= original_volume;
-        if (asks_[tick_value].volume == 0)
+        auto level_it = asks_.find(tick_value);
+        if (level_it != asks_.end())
         {
-            asks_.erase(tick_value);
-
-            // Update best ask if needed
-            if (tick_value == best_ask_)
+            auto& level = level_it->second;
+            level.volume -= original_volume;
+            if (had_queue_it)
             {
-                best_ask_ = find_best_ask();
+                level.fifo.erase(queue_it);
             }
+
+            if (level.volume == 0)
+            {
+                asks_.erase(level_it);
+
+                // Update best ask if needed
+                if (tick_value == best_ask_)
+                {
+                    best_ask_ = find_best_ask();
+                }
+            }
+        }
+        else if (tick_value == best_ask_)
+        {
+            best_ask_ = find_best_ask();
         }
     }
 
@@ -333,15 +470,60 @@ public:
         return dummy_order;
     }
 
-    // FIFO front order lookups - no-op for non-FIFO baseline (just returns level aggregate)
     [[nodiscard]] order_type front_order_at_bid_level(size_type level) const
     {
-        return bid_at_level(level);
+        if (bids_.empty())
+        {
+            order_type dummy_order{};
+            order_volume_setter(dummy_order, 0);
+            order_tick_setter(dummy_order, tick_type{});
+            return dummy_order;
+        }
+
+        auto it = bids_.begin();
+        for (size_type i = 0; i < level && it != bids_.end(); ++i, ++it)
+        {}
+
+        if (it != bids_.end() && !it->second.fifo.empty())
+        {
+            const auto order_id = it->second.fifo.front();
+            auto order_it = orders_.find(order_id);
+            assert(order_it != orders_.end());
+            return order_it->second.order;
+        }
+
+        order_type dummy_order{};
+        order_volume_setter(dummy_order, 0);
+        order_tick_setter(dummy_order, tick_type{});
+        return dummy_order;
     }
 
     [[nodiscard]] order_type front_order_at_ask_level(size_type level) const
     {
-        return ask_at_level(level);
+        if (asks_.empty())
+        {
+            order_type dummy_order{};
+            order_volume_setter(dummy_order, 0);
+            order_tick_setter(dummy_order, tick_type{});
+            return dummy_order;
+        }
+
+        auto it = asks_.begin();
+        for (size_type i = 0; i < level && it != asks_.end(); ++i, ++it)
+        {}
+
+        if (it != asks_.end() && !it->second.fifo.empty())
+        {
+            const auto order_id = it->second.fifo.front();
+            auto order_it = orders_.find(order_id);
+            assert(order_it != orders_.end());
+            return order_it->second.order;
+        }
+
+        order_type dummy_order{};
+        order_volume_setter(dummy_order, 0);
+        order_tick_setter(dummy_order, tick_type{});
+        return dummy_order;
     }
 
     [[nodiscard]] size_type size() const noexcept

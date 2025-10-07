@@ -1,12 +1,25 @@
 #pragma once
 
 #include <array>
+#include <bit>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <memory_resource>
 #include <stdexcept>
 #include <utility>
+
+#if defined(_MSC_VER) && !defined(__clang__)
+#include <intrin.h>
+#endif
+
+#if defined(__clang__) || defined(__GNUC__)
+#define JAZZY_HAS_NO_SANITIZE_UNDEFINED 1
+#define JAZZY_NO_SANITIZE_UNDEFINED __attribute__((no_sanitize("undefined")))
+#else
+#define JAZZY_HAS_NO_SANITIZE_UNDEFINED 0
+#define JAZZY_NO_SANITIZE_UNDEFINED
+#endif
 
 #ifndef JAZZY_HAS_BUILTIN_POPCOUNT
 #if defined(__clang__) || defined(__GNUC__)
@@ -81,20 +94,103 @@ inline constexpr std::size_t bits_per_block = 64;
 #endif
 }
 
-[[nodiscard]] inline constexpr int lsb_index(std::uint64_t value) noexcept
+#if JAZZY_HAS_NO_SANITIZE_UNDEFINED
+JAZZY_NO_SANITIZE_UNDEFINED inline constexpr int lsb_index_debruijn(std::uint64_t value) noexcept
 {
-    assert(value != 0);
-#if JAZZY_HAS_BUILTIN_CTZ
-    return __builtin_ctzll(value);
-#else
     static constexpr std::uint64_t debruijn = 0x03f79d71b4cb0a89ULL;
     static constexpr int table[64] = {0,  1,  48, 2,  57, 49, 28, 3,  61, 58, 50, 42, 38, 29, 17, 4,
                                       62, 55, 59, 36, 53, 51, 43, 22, 45, 39, 33, 30, 24, 18, 12, 5,
                                       63, 47, 56, 27, 60, 41, 37, 16, 54, 35, 52, 21, 44, 32, 23, 11,
                                       46, 26, 40, 15, 34, 20, 31, 10, 25, 14, 19, 9,  13, 8,  7,  6};
-    // Isolate lowest set bit: value & -value can trigger MSVC warning C4146
-    // Use two's complement equivalent: value & (~value + 1)
-    return table[((value & (~value + 1)) * debruijn) >> 58];
+    const std::uint64_t isolated_bit = value & (~value + 1);
+    return table[((isolated_bit)*debruijn) >> 58];
+}
+
+JAZZY_NO_SANITIZE_UNDEFINED inline constexpr unsigned int select_bit_from_msb_branchless(
+    std::uint64_t value,
+    unsigned int rank) noexcept
+{
+    constexpr unsigned int SIGN_BIT_MASK = 256; // 0x100, used to detect negative subtraction
+    constexpr unsigned int BITS_PER_UINT64 = 64;
+
+    unsigned int rank_one_indexed = rank + 1; // Algorithm uses 1-indexed rank
+
+    // Parallel bit count for 64-bit integer (SWAR technique)
+    constexpr auto mask_01 = repeat_byte_pattern(0x55); // 0101 pattern
+    constexpr auto mask_00_11 = repeat_byte_pattern(0x33); // 0011 pattern
+    constexpr auto mask_nibble = repeat_byte_pattern(0x0f); // 00001111 pattern
+    constexpr auto mask_byte = repeat_word_pattern(0x00ff); // alternating bytes
+
+    std::uint64_t a = value - ((value >> 1) & mask_01);
+    std::uint64_t b = (a & mask_00_11) + ((a >> 2) & mask_00_11);
+    std::uint64_t c = (b + (b >> 4)) & mask_nibble;
+    std::uint64_t d = (c + (c >> 8)) & mask_byte;
+    unsigned int bit_count = static_cast<unsigned int>((d >> 32) + (d >> 48));
+
+    unsigned int position = BITS_PER_UINT64;
+
+    position -= ((bit_count - rank_one_indexed) & SIGN_BIT_MASK) >> 3;
+    rank_one_indexed -= (bit_count & ((bit_count - rank_one_indexed) >> 8));
+
+    bit_count = static_cast<unsigned int>((d >> (position - 16)) & 0xff);
+    position -= ((bit_count - rank_one_indexed) & SIGN_BIT_MASK) >> 4;
+    rank_one_indexed -= (bit_count & ((bit_count - rank_one_indexed) >> 8));
+
+    bit_count = static_cast<unsigned int>((c >> (position - 8)) & 0xf);
+    position -= ((bit_count - rank_one_indexed) & SIGN_BIT_MASK) >> 5;
+    rank_one_indexed -= (bit_count & ((bit_count - rank_one_indexed) >> 8));
+
+    bit_count = static_cast<unsigned int>((b >> (position - 4)) & 0x7);
+    position -= ((bit_count - rank_one_indexed) & SIGN_BIT_MASK) >> 6;
+    rank_one_indexed -= (bit_count & ((bit_count - rank_one_indexed) >> 8));
+
+    bit_count = static_cast<unsigned int>((a >> (position - 2)) & 0x3);
+    position -= ((bit_count - rank_one_indexed) & SIGN_BIT_MASK) >> 7;
+    rank_one_indexed -= (bit_count & ((bit_count - rank_one_indexed) >> 8));
+
+    bit_count = static_cast<unsigned int>((value >> (position - 1)) & 0x1);
+    position -= ((bit_count - rank_one_indexed) & SIGN_BIT_MASK) >> 8;
+
+    position = 65 - position;
+    return BITS_PER_UINT64 - position;
+}
+#endif
+
+[[nodiscard]] inline constexpr int lsb_index(std::uint64_t value) noexcept
+{
+    assert(value != 0);
+#if JAZZY_HAS_BUILTIN_CTZ
+    return __builtin_ctzll(value);
+#elif defined(__cpp_lib_bitops) && (__cpp_lib_bitops >= 201907L)
+    return static_cast<int>(std::countr_zero(value));
+#elif defined(_MSC_VER) && !defined(__clang__)
+    if (std::is_constant_evaluated())
+    {
+        // Fallback for compile-time evaluation
+        unsigned int shift = 0;
+        while ((value & 1ULL) == 0ULL)
+        {
+            value >>= 1;
+            ++shift;
+        }
+        return static_cast<int>(shift);
+    }
+    else
+    {
+        unsigned long index{};
+        _BitScanForward64(&index, value);
+        return static_cast<int>(index);
+    }
+#elif JAZZY_HAS_NO_SANITIZE_UNDEFINED
+    return lsb_index_debruijn(value);
+#else
+    unsigned int shift = 0;
+    while ((value & 1ULL) == 0ULL)
+    {
+        value >>= 1;
+        ++shift;
+    }
+    return static_cast<int>(shift);
 #endif
 }
 
@@ -115,64 +211,26 @@ inline constexpr std::size_t bits_per_block = 64;
         word &= ~(1ULL << msb);
     }
     return 63U - static_cast<unsigned int>(__builtin_clzll(word));
+#elif defined(__cpp_lib_bitops) && (__cpp_lib_bitops >= 201907L)
+    std::uint64_t word = value;
+    for (unsigned int i = 0; i < rank; ++i)
+    {
+        const auto msb = 63U - static_cast<unsigned int>(std::countl_zero(word));
+        word &= ~(1ULL << msb);
+    }
+    return 63U - static_cast<unsigned int>(std::countl_zero(word));
+#elif JAZZY_HAS_NO_SANITIZE_UNDEFINED
+    return select_bit_from_msb_branchless(value, rank);
 #else
-    // Portable branchless implementation
-    // Constants for the branchless select algorithm
-    constexpr unsigned int SIGN_BIT_MASK = 256; // 0x100, used to detect negative subtraction
-    constexpr unsigned int BITS_PER_UINT64 = 64;
+    const unsigned int total_bits = static_cast<unsigned int>(popcount(value));
+    const unsigned int target_from_lsb = total_bits - rank - 1;
 
-    unsigned int rank_one_indexed = rank + 1; // Algorithm uses 1-indexed rank
-
-    // Parallel bit count for 64-bit integer (SWAR technique)
-    constexpr auto mask_01 = repeat_byte_pattern(0x55); // 0101 pattern
-    constexpr auto mask_00_11 = repeat_byte_pattern(0x33); // 0011 pattern
-    constexpr auto mask_nibble = repeat_byte_pattern(0x0f); // 00001111 pattern
-    constexpr auto mask_byte = repeat_word_pattern(0x00ff); // alternating bytes
-
-    std::uint64_t a = value - ((value >> 1) & mask_01);
-    std::uint64_t b = (a & mask_00_11) + ((a >> 2) & mask_00_11);
-    std::uint64_t c = (b + (b >> 4)) & mask_nibble;
-    std::uint64_t d = (c + (c >> 8)) & mask_byte;
-    unsigned int bit_count = static_cast<unsigned int>((d >> 32) + (d >> 48));
-
-    // Branchless binary search to find the bit position
-    // Each step narrows down the position by half using bit counts
-    unsigned int position = BITS_PER_UINT64;
-
-    // Check upper 32 bits
-    position -= ((bit_count - rank_one_indexed) & SIGN_BIT_MASK) >> 3;
-    rank_one_indexed -= (bit_count & ((bit_count - rank_one_indexed) >> 8));
-
-    // Check 16-bit chunks
-    bit_count = static_cast<unsigned int>((d >> (position - 16)) & 0xff);
-    position -= ((bit_count - rank_one_indexed) & SIGN_BIT_MASK) >> 4;
-    rank_one_indexed -= (bit_count & ((bit_count - rank_one_indexed) >> 8));
-
-    // Check 8-bit chunks
-    bit_count = static_cast<unsigned int>((c >> (position - 8)) & 0xf);
-    position -= ((bit_count - rank_one_indexed) & SIGN_BIT_MASK) >> 5;
-    rank_one_indexed -= (bit_count & ((bit_count - rank_one_indexed) >> 8));
-
-    // Check 4-bit chunks
-    bit_count = static_cast<unsigned int>((b >> (position - 4)) & 0x7);
-    position -= ((bit_count - rank_one_indexed) & SIGN_BIT_MASK) >> 6;
-    rank_one_indexed -= (bit_count & ((bit_count - rank_one_indexed) >> 8));
-
-    // Check 2-bit chunks
-    bit_count = static_cast<unsigned int>((a >> (position - 2)) & 0x3);
-    position -= ((bit_count - rank_one_indexed) & SIGN_BIT_MASK) >> 7;
-    rank_one_indexed -= (bit_count & ((bit_count - rank_one_indexed) >> 8));
-
-    // Check final bit
-    bit_count = static_cast<unsigned int>((value >> (position - 1)) & 0x1);
-    position -= ((bit_count - rank_one_indexed) & SIGN_BIT_MASK) >> 8;
-
-    // Convert from position counting from right to 1-indexed
-    position = 65 - position;
-
-    // Algorithm returns 1-indexed position from MSB (1=bit 63, 64=bit 0)
-    // Convert to bit index: bit_index = 64 - position
-    return BITS_PER_UINT64 - position;
+    std::uint64_t word = value;
+    for (unsigned int i = 0; i < target_from_lsb; ++i)
+    {
+        word &= (word - 1); // clear lowest set bit each iteration
+    }
+    return static_cast<unsigned int>(lsb_index(word));
 #endif
 }
 

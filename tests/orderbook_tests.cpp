@@ -1013,3 +1013,62 @@ SCENARIO("order book market stats sizing", "[orderbook][sizing]")
         }
     }
 }
+
+SCENARIO("order books can be cleared", "[orderbook][clear]")
+{
+    GIVEN("An order book with multiple orders")
+    {
+        using VectorOrderBook = jazzy::order_book<int, jazzy::tests::order, test_market_stats>;
+        using MapOrderBook = jazzy::benchmarks::map_order_book<int, jazzy::tests::order, test_market_stats>;
+
+        auto test_clear = []<typename BookType>() {
+            BookType book{};
+
+            // Add multiple bids
+            book.insert_bid(100, jazzy::tests::order{.order_id = 1, .volume = 10});
+            book.insert_bid(101, jazzy::tests::order{.order_id = 2, .volume = 20});
+            book.insert_bid(102, jazzy::tests::order{.order_id = 3, .volume = 30});
+
+            // Add multiple asks
+            book.insert_ask(110, jazzy::tests::order{.order_id = 4, .volume = 15});
+            book.insert_ask(111, jazzy::tests::order{.order_id = 5, .volume = 25});
+            book.insert_ask(112, jazzy::tests::order{.order_id = 6, .volume = 35});
+
+            // Verify orders are present
+            REQUIRE(book.bid_volume_at_tick(100) == 10);
+            REQUIRE(book.bid_volume_at_tick(101) == 20);
+            REQUIRE(book.bid_volume_at_tick(102) == 30);
+            REQUIRE(book.ask_volume_at_tick(110) == 15);
+            REQUIRE(book.ask_volume_at_tick(111) == 25);
+            REQUIRE(book.ask_volume_at_tick(112) == 35);
+
+            // Clear the book
+            book.clear();
+
+            // Verify all orders are removed
+            REQUIRE(book.bid_volume_at_tick(100) == 0);
+            REQUIRE(book.bid_volume_at_tick(101) == 0);
+            REQUIRE(book.bid_volume_at_tick(102) == 0);
+            REQUIRE(book.ask_volume_at_tick(110) == 0);
+            REQUIRE(book.ask_volume_at_tick(111) == 0);
+            REQUIRE(book.ask_volume_at_tick(112) == 0);
+
+            // Verify new orders can be added after clearing
+            book.insert_bid(105, jazzy::tests::order{.order_id = 7, .volume = 100});
+            book.insert_ask(115, jazzy::tests::order{.order_id = 8, .volume = 200});
+
+            REQUIRE(book.bid_volume_at_tick(105) == 100);
+            REQUIRE(book.ask_volume_at_tick(115) == 200);
+        };
+
+        WHEN("Testing vector book")
+        {
+            test_clear.template operator()<VectorOrderBook>();
+        }
+
+        WHEN("Testing map book")
+        {
+            test_clear.template operator()<MapOrderBook>();
+        }
+    }
+}
