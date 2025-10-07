@@ -1,5 +1,6 @@
 #include "../tests/order.hpp"
 #include "map_order_book.hpp"
+#include "fifo_map_order_book.hpp"
 #include <benchmark/benchmark.h>
 #include <jazzy/order_book.hpp>
 
@@ -12,6 +13,7 @@ using test_market_stats = jazzy::market_statistics<int, 130, 90, 110, 2000>;
 
 using VectorOrderBook = jazzy::order_book<int, jazzy::tests::order, test_market_stats>;
 using MapOrderBook = jazzy::benchmarks::map_order_book<int, jazzy::tests::order, test_market_stats>;
+using FifoMapOrderBook = jazzy::benchmarks::fifo_map_order_book<int, jazzy::tests::order, test_market_stats>;
 
 namespace {
 
@@ -133,7 +135,7 @@ public:
 };
 
 // Benchmark: Adding orders to empty order book
-BENCHMARK_DEFINE_F(OrderBookFixture, JazzyAddOrders)(benchmark::State& state)
+BENCHMARK_DEFINE_F(OrderBookFixture, AddOrders_JazzyVector)(benchmark::State& state)
 {
     auto rng = make_rng();
     for (auto _ : state)
@@ -153,7 +155,7 @@ BENCHMARK_DEFINE_F(OrderBookFixture, JazzyAddOrders)(benchmark::State& state)
     state.SetComplexityN(state.range(0));
 }
 
-BENCHMARK_DEFINE_F(OrderBookFixture, MapAddOrders)(benchmark::State& state)
+BENCHMARK_DEFINE_F(OrderBookFixture, AddOrders_MapAggregate)(benchmark::State& state)
 {
     auto rng = make_rng();
     for (auto _ : state)
@@ -173,8 +175,30 @@ BENCHMARK_DEFINE_F(OrderBookFixture, MapAddOrders)(benchmark::State& state)
     state.SetComplexityN(state.range(0));
 }
 
+static void BM_AddOrders_MapFifo(benchmark::State& state)
+{
+    static std::vector<FifoMapOrderBook> fifo_map_books(OrderBookFixture::POOL_SIZE);
+    static std::size_t book_idx = 0;
+
+    auto rng = make_rng();
+    for (auto _ : state)
+    {
+        recycle_pool(fifo_map_books, book_idx, state);
+        auto& book = fifo_map_books[book_idx++];
+
+        for (int i = 0; i < state.range(0); ++i)
+        {
+            auto order = generate_random_order(i, rng);
+            (void)add_random_order(book, order, rng);
+        }
+
+        benchmark::DoNotOptimize(book);
+    }
+    state.SetComplexityN(state.range(0));
+}
+
 // Benchmark: Volume lookups in populated order book
-static void BM_JazzyOrderBook_VolumeLookup(benchmark::State& state)
+static void BM_VolumeLookup_JazzyVector(benchmark::State& state)
 {
     VectorOrderBook book{};
     std::vector<int> ticks;
@@ -205,7 +229,7 @@ static void BM_JazzyOrderBook_VolumeLookup(benchmark::State& state)
     state.SetComplexityN(state.range(0));
 }
 
-static void BM_MapOrderBook_VolumeLookup(benchmark::State& state)
+static void BM_VolumeLookup_MapAggregate(benchmark::State& state)
 {
     MapOrderBook book{};
     std::vector<int> ticks;
@@ -237,7 +261,7 @@ static void BM_MapOrderBook_VolumeLookup(benchmark::State& state)
 }
 
 // Benchmark: Mixed operations (add/update/remove)
-BENCHMARK_DEFINE_F(OrderBookFixture, JazzyMixedOps)(benchmark::State& state)
+BENCHMARK_DEFINE_F(OrderBookFixture, MixedOps_JazzyVector)(benchmark::State& state)
 {
     auto rng = make_rng();
     for (auto _ : state)
@@ -304,7 +328,7 @@ BENCHMARK_DEFINE_F(OrderBookFixture, JazzyMixedOps)(benchmark::State& state)
     state.SetComplexityN(state.range(0));
 }
 
-BENCHMARK_DEFINE_F(OrderBookFixture, MapMixedOps)(benchmark::State& state)
+BENCHMARK_DEFINE_F(OrderBookFixture, MixedOps_MapAggregate)(benchmark::State& state)
 {
     auto rng = make_rng();
     for (auto _ : state)
@@ -372,7 +396,7 @@ BENCHMARK_DEFINE_F(OrderBookFixture, MapMixedOps)(benchmark::State& state)
 }
 
 // Benchmark: Update orders with realistic distribution (75% in top 5 price levels)
-static void BM_JazzyOrderBook_UpdateOrders(benchmark::State& state)
+static void BM_UpdateOrders_JazzyVector(benchmark::State& state)
 {
     VectorOrderBook book{};
     std::vector<jazzy::tests::order> hot_orders; // Top 5 price levels (near best bid/ask)
@@ -433,7 +457,7 @@ static void BM_JazzyOrderBook_UpdateOrders(benchmark::State& state)
     state.SetComplexityN(state.range(0));
 }
 
-static void BM_MapOrderBook_UpdateOrders(benchmark::State& state)
+static void BM_UpdateOrders_MapAggregate(benchmark::State& state)
 {
     MapOrderBook book{};
     std::vector<jazzy::tests::order> hot_orders; // Top 5 price levels (near best bid/ask)
@@ -495,7 +519,7 @@ static void BM_MapOrderBook_UpdateOrders(benchmark::State& state)
 }
 
 // Benchmark: Delete orders from populated order book
-BENCHMARK_DEFINE_F(OrderBookFixture, JazzyDeleteOrders)(benchmark::State& state)
+BENCHMARK_DEFINE_F(OrderBookFixture, DeleteOrders_JazzyVector)(benchmark::State& state)
 {
     auto rng = make_rng();
     for (auto _ : state)
@@ -532,7 +556,7 @@ BENCHMARK_DEFINE_F(OrderBookFixture, JazzyDeleteOrders)(benchmark::State& state)
     state.SetComplexityN(state.range(0));
 }
 
-BENCHMARK_DEFINE_F(OrderBookFixture, MapDeleteOrders)(benchmark::State& state)
+BENCHMARK_DEFINE_F(OrderBookFixture, DeleteOrders_MapAggregate)(benchmark::State& state)
 {
     auto rng = make_rng();
     for (auto _ : state)
@@ -570,7 +594,7 @@ BENCHMARK_DEFINE_F(OrderBookFixture, MapDeleteOrders)(benchmark::State& state)
 }
 
 // Benchmark: Get order at level operations
-static void BM_JazzyOrderBook_GetOrderAtLevel(benchmark::State& state)
+static void BM_GetLevelSnapshot_JazzyVector(benchmark::State& state)
 {
     VectorOrderBook book{};
     auto rng = make_rng();
@@ -597,7 +621,7 @@ static void BM_JazzyOrderBook_GetOrderAtLevel(benchmark::State& state)
     state.SetComplexityN(state.range(0));
 }
 
-static void BM_MapOrderBook_GetOrderAtLevel(benchmark::State& state)
+static void BM_GetLevelSnapshot_MapAggregate(benchmark::State& state)
 {
     MapOrderBook book{};
     auto rng = make_rng();
@@ -624,27 +648,145 @@ static void BM_MapOrderBook_GetOrderAtLevel(benchmark::State& state)
     state.SetComplexityN(state.range(0));
 }
 
-// Register benchmarks with various sizes
-BENCHMARK_REGISTER_F(OrderBookFixture, JazzyAddOrders)->Range(8, 8 << 10)->Complexity();
-BENCHMARK_REGISTER_F(OrderBookFixture, MapAddOrders)->Range(8, 8 << 10)->Complexity();
+static void BM_FrontOrderPeek_MapAggregate(benchmark::State& state)
+{
+    MapOrderBook book{};
+    auto rng = make_rng();
 
-BENCHMARK(BM_JazzyOrderBook_UpdateOrders)->Range(8, 8 << 10)->Complexity();
-BENCHMARK(BM_MapOrderBook_UpdateOrders)->Range(8, 8 << 10)->Complexity();
+    for (int i = 0; i < state.range(0); ++i)
+    {
+        auto order = generate_random_order(i, rng);
+        (void)add_random_order(book, order, rng);
+    }
 
-BENCHMARK_REGISTER_F(OrderBookFixture, JazzyDeleteOrders)->Range(8, 8 << 10)->Complexity();
-BENCHMARK_REGISTER_F(OrderBookFixture, MapDeleteOrders)->Range(8, 8 << 10)->Complexity();
+    for (auto _ : state)
+    {
+        const size_t max_levels = std::min<size_t>(20, static_cast<size_t>(state.range(0)));
+        for (size_t level = 0; level < max_levels; ++level)
+        {
+            auto bid_order = book.front_order_at_bid_level(level);
+            auto ask_order = book.front_order_at_ask_level(level);
+            benchmark::DoNotOptimize(bid_order);
+            benchmark::DoNotOptimize(ask_order);
+        }
+    }
+    state.SetComplexityN(state.range(0));
+}
 
-BENCHMARK(BM_JazzyOrderBook_VolumeLookup)->Range(8, 8 << 10)->Complexity();
-BENCHMARK(BM_MapOrderBook_VolumeLookup)->Range(8, 8 << 10)->Complexity();
+// FifoMapOrderBook benchmarks
+static void BM_UpdateOrders_MapFifo(benchmark::State& state)
+{
+    static std::vector<FifoMapOrderBook> map_books(100);
+    static std::size_t book_idx = 0;
 
-BENCHMARK(BM_JazzyOrderBook_GetOrderAtLevel)->Range(8, 8 << 10)->Complexity();
-BENCHMARK(BM_MapOrderBook_GetOrderAtLevel)->Range(8, 8 << 10)->Complexity();
+    for (auto _ : state)
+    {
+        recycle_pool(map_books, book_idx, state);
+        auto& book = map_books[book_idx++];
+        auto rng = make_rng();
 
-BENCHMARK_REGISTER_F(OrderBookFixture, JazzyMixedOps)->Range(8, 8 << 10)->Complexity();
-BENCHMARK_REGISTER_F(OrderBookFixture, MapMixedOps)->Range(8, 8 << 10)->Complexity();
+        for (int i = 0; i < state.range(0); ++i)
+        {
+            auto order = generate_random_order(i, rng);
+            bool is_bid = add_random_order(book, order, rng);
+
+            // Update the order
+            std::uniform_int_distribution<int> volume_dist(1, 1000);
+            order.volume = volume_dist(rng);
+
+            if (is_bid)
+            {
+                book.update_bid(order.tick, order);
+            }
+            else
+            {
+                book.update_ask(order.tick, order);
+            }
+        }
+        benchmark::DoNotOptimize(book);
+    }
+    state.SetComplexityN(state.range(0));
+}
+
+static void BM_GetLevelSnapshot_MapFifo(benchmark::State& state)
+{
+    FifoMapOrderBook book{};
+    auto rng = make_rng();
+
+    // Pre-populate the order book with orders at different levels
+    for (int i = 0; i < state.range(0); ++i)
+    {
+        auto order = generate_random_order(i, rng);
+        (void)add_random_order(book, order, rng);
+    }
+
+    for (auto _ : state)
+    {
+        // Access orders at different levels - scale with input but cap at 20
+        const size_t max_levels = std::min(size_t(20), static_cast<size_t>(state.range(0)));
+        for (size_t level = 0; level < max_levels; ++level)
+        {
+            auto bid_order = book.bid_at_level(level);
+            auto ask_order = book.ask_at_level(level);
+            benchmark::DoNotOptimize(bid_order);
+            benchmark::DoNotOptimize(ask_order);
+        }
+    }
+    state.SetComplexityN(state.range(0));
+}
+
+static void BM_FrontOrderPeek_MapFifo(benchmark::State& state)
+{
+    FifoMapOrderBook book{};
+    auto rng = make_rng();
+
+    for (int i = 0; i < state.range(0); ++i)
+    {
+        auto order = generate_random_order(i, rng);
+        (void)add_random_order(book, order, rng);
+    }
+
+    for (auto _ : state)
+    {
+        const size_t max_levels = std::min<size_t>(20, static_cast<size_t>(state.range(0)));
+        for (size_t level = 0; level < max_levels; ++level)
+        {
+            auto bid_order = book.front_order_at_bid_level(level);
+            auto ask_order = book.front_order_at_ask_level(level);
+            benchmark::DoNotOptimize(bid_order);
+            benchmark::DoNotOptimize(ask_order);
+        }
+    }
+    state.SetComplexityN(state.range(0));
+}
+
+// Register benchmarks grouped by container type
+
+// Jazzy order_book (vector aggregate storage)
+BENCHMARK_REGISTER_F(OrderBookFixture, AddOrders_JazzyVector)->Range(8, 8 << 10)->Complexity();
+BENCHMARK(BM_UpdateOrders_JazzyVector)->Range(8, 8 << 10)->Complexity();
+BENCHMARK_REGISTER_F(OrderBookFixture, DeleteOrders_JazzyVector)->Range(8, 8 << 10)->Complexity();
+BENCHMARK_REGISTER_F(OrderBookFixture, MixedOps_JazzyVector)->Range(8, 8 << 10)->Complexity();
+BENCHMARK(BM_VolumeLookup_JazzyVector)->Range(8, 8 << 10)->Complexity();
+BENCHMARK(BM_GetLevelSnapshot_JazzyVector)->Range(8, 8 << 10)->Complexity();
+
+// Map order book (aggregate per level)
+BENCHMARK_REGISTER_F(OrderBookFixture, AddOrders_MapAggregate)->Range(8, 8 << 10)->Complexity();
+BENCHMARK(BM_UpdateOrders_MapAggregate)->Range(8, 8 << 10)->Complexity();
+BENCHMARK_REGISTER_F(OrderBookFixture, DeleteOrders_MapAggregate)->Range(8, 8 << 10)->Complexity();
+BENCHMARK_REGISTER_F(OrderBookFixture, MixedOps_MapAggregate)->Range(8, 8 << 10)->Complexity();
+BENCHMARK(BM_VolumeLookup_MapAggregate)->Range(8, 8 << 10)->Complexity();
+BENCHMARK(BM_GetLevelSnapshot_MapAggregate)->Range(8, 8 << 10)->Complexity();
+BENCHMARK(BM_FrontOrderPeek_MapAggregate)->Range(8, 8 << 10)->Complexity();
+
+// Map order book with FIFO queues
+BENCHMARK(BM_AddOrders_MapFifo)->Range(8, 8 << 10)->Complexity();
+BENCHMARK(BM_UpdateOrders_MapFifo)->Range(8, 8 << 10)->Complexity();
+BENCHMARK(BM_GetLevelSnapshot_MapFifo)->Range(8, 8 << 10)->Complexity();
+BENCHMARK(BM_FrontOrderPeek_MapFifo)->Range(8, 8 << 10)->Complexity();
 
 // FIFO vs Aggregate Storage Benchmarks
-BENCHMARK_DEFINE_F(FifoOrderBookFixture, AggregateAddOrders)(benchmark::State& state)
+BENCHMARK_DEFINE_F(FifoOrderBookFixture, AddOrders_JazzyVectorAggregate)(benchmark::State& state)
 {
     auto rng = make_rng();
     for (auto _ : state)
@@ -662,7 +804,7 @@ BENCHMARK_DEFINE_F(FifoOrderBookFixture, AggregateAddOrders)(benchmark::State& s
     state.SetComplexityN(state.range(0));
 }
 
-BENCHMARK_DEFINE_F(FifoOrderBookFixture, FifoAddOrders)(benchmark::State& state)
+BENCHMARK_DEFINE_F(FifoOrderBookFixture, AddOrders_JazzyVectorFifo)(benchmark::State& state)
 {
     auto rng = make_rng();
     for (auto _ : state)
@@ -680,7 +822,7 @@ BENCHMARK_DEFINE_F(FifoOrderBookFixture, FifoAddOrders)(benchmark::State& state)
     state.SetComplexityN(state.range(0));
 }
 
-BENCHMARK_DEFINE_F(FifoOrderBookFixture, AggregateUpdateOrders)(benchmark::State& state)
+BENCHMARK_DEFINE_F(FifoOrderBookFixture, UpdateOrders_JazzyVectorAggregate)(benchmark::State& state)
 {
     auto rng = make_rng();
     for (auto _ : state)
@@ -710,7 +852,7 @@ BENCHMARK_DEFINE_F(FifoOrderBookFixture, AggregateUpdateOrders)(benchmark::State
     state.SetComplexityN(state.range(0));
 }
 
-BENCHMARK_DEFINE_F(FifoOrderBookFixture, FifoUpdateOrders)(benchmark::State& state)
+BENCHMARK_DEFINE_F(FifoOrderBookFixture, UpdateOrders_JazzyVectorFifo)(benchmark::State& state)
 {
     auto rng = make_rng();
     for (auto _ : state)
@@ -742,7 +884,7 @@ BENCHMARK_DEFINE_F(FifoOrderBookFixture, FifoUpdateOrders)(benchmark::State& sta
     state.SetComplexityN(state.range(0));
 }
 
-BENCHMARK_DEFINE_F(FifoOrderBookFixture, AggregateMixedOps)(benchmark::State& state)
+BENCHMARK_DEFINE_F(FifoOrderBookFixture, MixedOps_JazzyVectorAggregate)(benchmark::State& state)
 {
     auto rng = make_rng();
     for (auto _ : state)
@@ -792,7 +934,7 @@ BENCHMARK_DEFINE_F(FifoOrderBookFixture, AggregateMixedOps)(benchmark::State& st
     state.SetComplexityN(state.range(0));
 }
 
-BENCHMARK_DEFINE_F(FifoOrderBookFixture, FifoMixedOps)(benchmark::State& state)
+BENCHMARK_DEFINE_F(FifoOrderBookFixture, MixedOps_JazzyVectorFifo)(benchmark::State& state)
 {
     auto rng = make_rng();
     for (auto _ : state)
@@ -845,7 +987,7 @@ BENCHMARK_DEFINE_F(FifoOrderBookFixture, FifoMixedOps)(benchmark::State& state)
     state.SetComplexityN(state.range(0));
 }
 
-static void BM_FifoOrderBook_FrontOrderLookup(benchmark::State& state)
+static void BM_FrontOrderPeek_JazzyVectorFifo(benchmark::State& state)
 {
     FifoOrderBook book{};
     auto rng = make_rng();
@@ -873,15 +1015,14 @@ static void BM_FifoOrderBook_FrontOrderLookup(benchmark::State& state)
     state.SetComplexityN(state.range(0));
 }
 
-BENCHMARK_REGISTER_F(FifoOrderBookFixture, AggregateAddOrders)->Range(8, 8 << 10)->Complexity();
-BENCHMARK_REGISTER_F(FifoOrderBookFixture, FifoAddOrders)->Range(8, 8 << 10)->Complexity();
+// Jazzy order_book (fixture) — aggregate vs FIFO storage
+BENCHMARK_REGISTER_F(FifoOrderBookFixture, AddOrders_JazzyVectorAggregate)->Range(8, 8 << 10)->Complexity();
+BENCHMARK_REGISTER_F(FifoOrderBookFixture, UpdateOrders_JazzyVectorAggregate)->Range(8, 8 << 10)->Complexity();
+BENCHMARK_REGISTER_F(FifoOrderBookFixture, MixedOps_JazzyVectorAggregate)->Range(8, 8 << 10)->Complexity();
 
-BENCHMARK_REGISTER_F(FifoOrderBookFixture, AggregateUpdateOrders)->Range(8, 8 << 10)->Complexity();
-BENCHMARK_REGISTER_F(FifoOrderBookFixture, FifoUpdateOrders)->Range(8, 8 << 10)->Complexity();
-
-BENCHMARK_REGISTER_F(FifoOrderBookFixture, AggregateMixedOps)->Range(8, 8 << 10)->Complexity();
-BENCHMARK_REGISTER_F(FifoOrderBookFixture, FifoMixedOps)->Range(8, 8 << 10)->Complexity();
-
-BENCHMARK(BM_FifoOrderBook_FrontOrderLookup)->Range(8, 8 << 10)->Complexity();
+BENCHMARK_REGISTER_F(FifoOrderBookFixture, AddOrders_JazzyVectorFifo)->Range(8, 8 << 10)->Complexity();
+BENCHMARK_REGISTER_F(FifoOrderBookFixture, UpdateOrders_JazzyVectorFifo)->Range(8, 8 << 10)->Complexity();
+BENCHMARK_REGISTER_F(FifoOrderBookFixture, MixedOps_JazzyVectorFifo)->Range(8, 8 << 10)->Complexity();
+BENCHMARK(BM_FrontOrderPeek_JazzyVectorFifo)->Range(8, 8 << 10)->Complexity();
 
 BENCHMARK_MAIN();
