@@ -347,6 +347,15 @@ public:
     [[nodiscard]] tick_type best_bid() const noexcept { return best_bid_; }
     [[nodiscard]] tick_type best_ask() const noexcept { return best_ask_; }
 
+    void clear() noexcept
+    {
+        bids_.clear();
+        asks_.clear();
+        orders_.clear();
+        best_bid_ = NO_BID_VALUE;
+        best_ask_ = NO_ASK_VALUE;
+    }
+
 private:
     tick_type find_best_bid() const { return bids_.empty() ? NO_BID_VALUE : bids_.begin()->first; }
 

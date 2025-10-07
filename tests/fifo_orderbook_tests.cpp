@@ -207,3 +207,49 @@ SCENARIO("FIFO order book handles ask side queue correctly", "[orderbook][fifo]"
         }
     }
 }
+
+SCENARIO("FIFO order book copy preserves queue iterators", "[orderbook][fifo][copy]")
+{
+    GIVEN("A FIFO order book with queued bids")
+    {
+        FifoOrderBook original{};
+        original.insert_bid(100, jazzy::tests::order{.order_id = 1, .volume = 10});
+        original.insert_bid(100, jazzy::tests::order{.order_id = 2, .volume = 20});
+        original.insert_bid(100, jazzy::tests::order{.order_id = 3, .volume = 30});
+
+        WHEN("The book is copy constructed")
+        {
+            FifoOrderBook copy{original};
+
+            THEN("Removing the front order keeps queue integrity")
+            {
+                copy.remove_bid(100, jazzy::tests::order{.order_id = 1, .volume = 10});
+
+                auto front = copy.front_order_at_bid_level(0);
+                REQUIRE(front.order_id == 2);
+                REQUIRE(copy.bid_volume_at_tick(100) == 50);
+
+                auto original_front = original.front_order_at_bid_level(0);
+                REQUIRE(original_front.order_id == 1);
+            }
+        }
+
+        WHEN("The book is copy assigned")
+        {
+            FifoOrderBook assigned{};
+            assigned = original;
+
+            THEN("Queue iterators are rebuilt in the assigned book")
+            {
+                assigned.update_bid(100, jazzy::tests::order{.order_id = 1, .volume = 15});
+
+                auto front = assigned.front_order_at_bid_level(0);
+                REQUIRE(front.order_id == 2);
+                REQUIRE(assigned.bid_volume_at_tick(100) == 65);
+
+                auto original_front = original.front_order_at_bid_level(0);
+                REQUIRE(original_front.order_id == 1);
+            }
+        }
+    }
+}

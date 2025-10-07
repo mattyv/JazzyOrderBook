@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <cstdint>
@@ -54,6 +55,11 @@ class order_book
         level& operator=(level&&) noexcept(
             std::is_nothrow_move_assignable_v<volume_type> && std::is_nothrow_move_assignable_v<level_storage_type>) =
             default;
+
+        level(std::pmr::memory_resource* resource)
+        requires is_fifo_enabled
+            : storage(resource)
+        {}
     };
 
 public:
@@ -173,16 +179,31 @@ public:
         , orders_(resource)
         , resource_(resource)
     {
-        bids_.resize(size_);
-        asks_.resize(size_);
+        if constexpr (is_fifo_enabled)
+        {
+            bids_.reserve(size_);
+            asks_.reserve(size_);
+            for (size_type idx = 0; idx < size_; ++idx)
+            {
+                bids_.emplace_back(resource_);
+                asks_.emplace_back(resource_);
+            }
+        }
+        else
+        {
+            bids_.resize(size_);
+            asks_.resize(size_);
+        }
         orders_.reserve(size_ * 10); // Arbitrary factor to reduce rehashing
     }
 
     ~order_book() = default;
 
     order_book(const order_book& other)
-        : order_book(other, other.resource_)
-    {}
+        : order_book(other.resource_)
+    {
+        clone_from(other);
+    }
 
     order_book(order_book&& other) noexcept
         : best_bid_(std::move(other.best_bid_))
@@ -199,8 +220,7 @@ public:
     {
         if (this != &other)
         {
-            order_book temp(other, resource_);
-            swap(temp);
+            clone_from(other);
         }
         return *this;
     }
@@ -222,15 +242,10 @@ public:
     }
 
     order_book(const order_book& other, std::pmr::memory_resource* resource)
-        : best_bid_(other.best_bid_)
-        , best_ask_(other.best_ask_)
-        , bid_bitmap_(other.bid_bitmap_)
-        , ask_bitmap_(other.ask_bitmap_)
-        , bids_(other.bids_, resource)
-        , asks_(other.asks_, resource)
-        , orders_(other.orders_, resource)
-        , resource_(resource)
-    {}
+        : order_book(resource)
+    {
+        clone_from(other);
+    }
 
     void swap(order_book& other) noexcept
     {
@@ -662,6 +677,36 @@ public:
 
     [[nodiscard]] std::pmr::memory_resource* get_memory_resource() const noexcept { return resource_; }
 
+    void clear() noexcept
+    {
+        orders_.clear();
+        best_bid_ = tick_type_strong::no_value();
+        best_ask_ = tick_type_strong::no_value();
+
+        // Clear all levels - simpler than iterating bitmap
+        for (size_t i = 0; i < size_; ++i)
+        {
+            if (bids_[i].volume != 0)
+            {
+                bids_[i].volume = 0;
+                if constexpr (is_fifo_enabled)
+                {
+                    bids_[i].storage.orders.clear();
+                }
+                bid_bitmap_.set(i, false);
+            }
+            if (asks_[i].volume != 0)
+            {
+                asks_[i].volume = 0;
+                if constexpr (is_fifo_enabled)
+                {
+                    asks_[i].storage.orders.clear();
+                }
+                ask_bitmap_.set(i, false);
+            }
+        }
+    }
+
     // FIFO-specific functions: only available when FIFO storage is enabled
     [[nodiscard]] order_type front_order_at_bid_level(size_type level) const
     requires is_fifo_enabled
@@ -736,6 +781,89 @@ public:
         {
             ask_bitmap_.set(index, on);
         }
+    }
+
+    template <typename LevelContainer>
+    void copy_levels_from(const LevelContainer& source, LevelContainer& target)
+    {
+        target.clear();
+        target.reserve(source.size());
+        for (const auto& src_level : source)
+        {
+            if constexpr (is_fifo_enabled)
+            {
+                target.emplace_back(resource_);
+            }
+            else
+            {
+                target.emplace_back();
+            }
+
+            auto& dst_level = target.back();
+            dst_level.volume = src_level.volume;
+
+            if constexpr (is_fifo_enabled)
+            {
+                auto& dst_queue = dst_level.storage.orders;
+                for (const auto& order_id : src_level.storage.orders)
+                {
+                    dst_queue.push_back(order_id);
+                }
+            }
+        }
+
+        assert(target.size() == source.size());
+    }
+
+    void clone_from(const order_book& other)
+    {
+        best_bid_ = other.best_bid_;
+        best_ask_ = other.best_ask_;
+        bid_bitmap_ = other.bid_bitmap_;
+        ask_bitmap_ = other.ask_bitmap_;
+
+        copy_levels_from(other.bids_, bids_);
+        copy_levels_from(other.asks_, asks_);
+
+        orders_.clear();
+        const size_type desired_capacity = std::max<size_type>(size_ * 10, other.orders_.size());
+        orders_.reserve(desired_capacity);
+        for (const auto& [id, data] : other.orders_)
+        {
+            auto [it, inserted] = orders_.emplace(id, order_data{data.order});
+            assert(inserted);
+            static_cast<void>(inserted);
+        }
+
+        if constexpr (is_fifo_enabled)
+        {
+            rebuild_fifo_queue_links();
+        }
+    }
+
+    void rebuild_fifo_queue_links()
+    requires is_fifo_enabled
+    {
+        for (auto& [id, data] : orders_)
+        {
+            static_cast<void>(id);
+            data.queue_it.reset();
+        }
+
+        auto relink_levels = [this](auto& levels) {
+            for (auto& level : levels)
+            {
+                for (auto queue_it = level.storage.orders.begin(); queue_it != level.storage.orders.end(); ++queue_it)
+                {
+                    auto order_entry = orders_.find(*queue_it);
+                    assert(order_entry != orders_.end());
+                    order_entry->second.queue_it = queue_it;
+                }
+            }
+        };
+
+        relink_levels(bids_);
+        relink_levels(asks_);
     }
 
     static constexpr size_type size_ =
