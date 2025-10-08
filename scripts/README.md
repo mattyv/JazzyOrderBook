@@ -62,6 +62,26 @@ To visualize previously saved benchmark results without re-running:
 python scripts/visualize_benchmarks.py --json-input results.json --no-run
 ```
 
+### Visualize Stored Best Runs
+
+If you've captured hardware-specific best runs with `scripts/benchmark_compare.sh`, you can compare the native and portable builds directly:
+
+```bash
+python scripts/visualize_benchmarks.py --use-best
+```
+
+By default the script auto-detects your hardware key (or falls back to the only `*_best.txt` pair it finds) under `./benchmark_results`. You can override the inputs as needed:
+
+```bash
+python scripts/visualize_benchmarks.py \
+  --use-best \
+  --hardware-key apple_m2 \
+  --best-results-dir ./benchmark_results \
+  --output-dir ./benchmark_results
+```
+
+You can also point to explicit files with `--native-best` and/or `--portable-best` if they live outside the results directory.
+
 ### Custom Output Directory
 
 Specify where to save the plots:
@@ -78,7 +98,7 @@ The script generates the following visualizations:
 
 For each benchmark operation (e.g., `AddOrders`, `UpdateOrders`, etc.):
 - **Left plot**: Execution time vs input size (log-log scale)
-- **Right plot**: Performance speedup ratio between implementations
+- **Right plot**: Portable build slowdown vs native (`portable / native` CPU time)
 
 Files: `<operation>_comparison.png`
 
@@ -123,7 +143,18 @@ open benchmark_results/summary_all_operations.png
 
 --json-input FILE       Use existing JSON file instead of running benchmarks
 
+--use-best              Load stored native/portable best runs (console output)
+
+--hardware-key KEY      Hardware key used for resolving stored best runs
+
+--native-best FILE      Explicit path to native best results
+
+--portable-best FILE    Explicit path to portable best results
+
 --output-dir DIR        Directory for output plots
+                        (default: ./benchmark_results)
+
+--best-results-dir DIR  Directory containing stored best run outputs
                         (default: ./benchmark_results)
 
 --no-run               Skip running benchmarks (requires --json-input)
@@ -132,6 +163,6 @@ open benchmark_results/summary_all_operations.png
 ## Understanding the Results
 
 - **Lower is better** for execution time plots
-- **Higher is better** for speedup ratios (>1.0 means JazzyOrderBook is faster)
+- **Portable ratio** values >1.0 indicate the portable build is slower than native
 - Log scales are used to show performance across wide input ranges
 - The bar chart shows absolute performance at maximum stress
