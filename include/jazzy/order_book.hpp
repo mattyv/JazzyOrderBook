@@ -14,6 +14,7 @@
 #include <vector>
 
 #include <jazzy/detail/level_bitmap.hpp>
+#include <jazzy/detail/intrusive_fifo.hpp>
 #include <jazzy/detail/level_storage.hpp>
 
 namespace jazzy {
@@ -70,11 +71,6 @@ private:
     using tick_type_strong = typename MarketStats::tick_type_strong_t;
 
     // When FIFO is enabled, we need to track where each order lives in the deque
-    using queue_iterator = std::conditional_t<
-        is_fifo_enabled,
-        typename level_storage_type::queue_iterator,
-        void*>;
-
     // Use EBO to guarantee zero overhead for aggregate-only orderbooks
     // Empty base for aggregate-only mode
     struct order_data_empty_base
@@ -83,7 +79,7 @@ private:
     // Non-empty base for FIFO mode
     struct order_data_fifo_base
     {
-        std::optional<queue_iterator> queue_it;
+        detail::intrusive_fifo_node<id_type> fifo_node;
     };
 
     // Each order gets stored with an optional iterator back to its position in the FIFO queue
@@ -95,6 +91,10 @@ private:
         order_data() = default;
         explicit order_data(order_type&& o) : order(std::move(o)) {}
         explicit order_data(const order_type& o) : order(o) {}
+        order_data(const order_data&) = default;
+        order_data(order_data&&) noexcept = default;
+        order_data& operator=(const order_data&) = default;
+        order_data& operator=(order_data&&) noexcept = default;
     };
 
     static constexpr size_type calculate_size(
@@ -284,9 +284,8 @@ public:
         // If FIFO is enabled, add this order to the back of the queue for this price level
         if constexpr (is_fifo_enabled)
         {
-            bids_[index].storage.orders.push_back(order_id);
-            auto queue_it = std::prev(bids_[index].storage.orders.end());
-            it->second.queue_it = queue_it;
+            auto node_lookup = make_node_lookup();
+            bids_[index].storage.queue.push_back(order_id, node_lookup);
         }
 
         if (!best_bid_.has_value() || tick_strong > best_bid_)
@@ -317,9 +316,8 @@ public:
         // If FIFO is enabled, add this order to the back of the queue for this price level
         if constexpr (is_fifo_enabled)
         {
-            asks_[index].storage.orders.push_back(order_id);
-            auto queue_it = std::prev(asks_[index].storage.orders.end());
-            it->second.queue_it = queue_it;
+            auto node_lookup = make_node_lookup();
+            asks_[index].storage.queue.push_back(order_id, node_lookup);
         }
 
         if (!best_ask_.has_value() || tick_strong < best_ask_)
@@ -363,10 +361,8 @@ public:
             {
                 if (volume_delta > 0)
                 {
-                    auto queue_it = it->second.queue_it.value();
-                    bids_[index].storage.orders.erase(queue_it);
-                    bids_[index].storage.orders.push_back(order_id);
-                    it->second.queue_it = std::prev(bids_[index].storage.orders.end());
+                    auto node_lookup = make_node_lookup();
+                    bids_[index].storage.queue.move_to_back(order_id, node_lookup);
                 }
                 // If volume decreased, keep position in queue
             }
@@ -385,8 +381,8 @@ public:
             // Remove from old price level's queue
             if constexpr (is_fifo_enabled)
             {
-                auto queue_it = it->second.queue_it.value();
-                bids_[old_index].storage.orders.erase(queue_it);
+                auto node_lookup = make_node_lookup();
+                bids_[old_index].storage.queue.erase(order_id, node_lookup);
             }
 
             size_type new_index = tick_to_index(tick_strong);
@@ -396,8 +392,8 @@ public:
             // Add to new price level's queue
             if constexpr (is_fifo_enabled)
             {
-                bids_[new_index].storage.orders.push_back(order_id);
-                it->second.queue_it = std::prev(bids_[new_index].storage.orders.end());
+                auto node_lookup = make_node_lookup();
+                bids_[new_index].storage.queue.push_back(order_id, node_lookup);
             }
 
             if (tick_strong > best_bid_)
@@ -446,10 +442,8 @@ public:
             {
                 if (volume_delta > 0)
                 {
-                    auto queue_it = it->second.queue_it.value();
-                    asks_[index].storage.orders.erase(queue_it);
-                    asks_[index].storage.orders.push_back(order_id);
-                    it->second.queue_it = std::prev(asks_[index].storage.orders.end());
+                    auto node_lookup = make_node_lookup();
+                    asks_[index].storage.queue.move_to_back(order_id, node_lookup);
                 }
                 // If volume decreased, keep position in queue
             }
@@ -468,8 +462,8 @@ public:
             // Remove from old price level's queue
             if constexpr (is_fifo_enabled)
             {
-                auto queue_it = it->second.queue_it.value();
-                asks_[old_index].storage.orders.erase(queue_it);
+                auto node_lookup = make_node_lookup();
+                asks_[old_index].storage.queue.erase(order_id, node_lookup);
             }
 
             size_type new_index = tick_to_index(tick_strong);
@@ -479,8 +473,8 @@ public:
             // Add to new price level's queue
             if constexpr (is_fifo_enabled)
             {
-                asks_[new_index].storage.orders.push_back(order_id);
-                it->second.queue_it = std::prev(asks_[new_index].storage.orders.end());
+                auto node_lookup = make_node_lookup();
+                asks_[new_index].storage.queue.push_back(order_id, node_lookup);
             }
 
             if (tick_strong < best_ask_)
@@ -512,8 +506,8 @@ public:
         // Remove from FIFO queue before erasing from map
         if constexpr (is_fifo_enabled)
         {
-            auto queue_it = it->second.queue_it.value();
-            bids_[index].storage.orders.erase(queue_it);
+            auto node_lookup = make_node_lookup();
+            bids_[index].storage.queue.erase(order_id_getter(order), node_lookup);
         }
 
         orders_.erase(it);
@@ -548,8 +542,8 @@ public:
         // Remove from FIFO queue before erasing from map
         if constexpr (is_fifo_enabled)
         {
-            auto queue_it = it->second.queue_it.value();
-            asks_[index].storage.orders.erase(queue_it);
+            auto node_lookup = make_node_lookup();
+            asks_[index].storage.queue.erase(order_id_getter(order), node_lookup);
         }
 
         orders_.erase(it);
@@ -691,7 +685,7 @@ public:
                 bids_[i].volume = 0;
                 if constexpr (is_fifo_enabled)
                 {
-                    bids_[i].storage.orders.clear();
+                    bids_[i].storage.queue.reset();
                 }
                 bid_bitmap_.set(i, false);
             }
@@ -700,7 +694,7 @@ public:
                 asks_[i].volume = 0;
                 if constexpr (is_fifo_enabled)
                 {
-                    asks_[i].storage.orders.clear();
+                    asks_[i].storage.queue.reset();
                 }
                 ask_bitmap_.set(i, false);
             }
@@ -717,10 +711,10 @@ public:
         assert(level < static_cast<size_type>(bid_bitmap_.count()));
 
         const size_t index = bid_bitmap_.select_from_high(static_cast<size_t>(level));
-        const auto& queue = bids_[index].storage.orders;
+        const auto& queue = bids_[index].storage.queue;
         assert(!queue.empty() && "No orders at this price level");
 
-        return get_order(queue.front());
+        return get_order(queue.front().value());
     }
 
     [[nodiscard]] order_type front_order_at_ask_level(size_type level) const
@@ -732,10 +726,10 @@ public:
         assert(level < static_cast<size_type>(ask_bitmap_.count()));
 
         const size_t index = ask_bitmap_.select_from_low(static_cast<size_t>(level));
-        const auto& queue = asks_[index].storage.orders;
+        const auto& queue = asks_[index].storage.queue;
         assert(!queue.empty() && "No orders at this price level");
 
-        return get_order(queue.front());
+        return get_order(queue.front().value());
     }
 
     constexpr size_type tick_to_index(const tick_type_strong& tick_value) const
@@ -804,11 +798,7 @@ public:
 
             if constexpr (is_fifo_enabled)
             {
-                auto& dst_queue = dst_level.storage.orders;
-                for (const auto& order_id : src_level.storage.orders)
-                {
-                    dst_queue.push_back(order_id);
-                }
+                dst_level.storage = src_level.storage;
             }
         }
 
@@ -830,40 +820,19 @@ public:
         orders_.reserve(desired_capacity);
         for (const auto& [id, data] : other.orders_)
         {
-            auto [it, inserted] = orders_.emplace(id, order_data{data.order});
+            auto [it, inserted] = orders_.emplace(id, data);
             assert(inserted);
             static_cast<void>(inserted);
         }
-
-        if constexpr (is_fifo_enabled)
-        {
-            rebuild_fifo_queue_links();
-        }
     }
 
-    void rebuild_fifo_queue_links()
-    requires is_fifo_enabled
+    auto make_node_lookup()
     {
-        for (auto& [id, data] : orders_)
-        {
-            static_cast<void>(id);
-            data.queue_it.reset();
-        }
-
-        auto relink_levels = [this](auto& levels) {
-            for (auto& level : levels)
-            {
-                for (auto queue_it = level.storage.orders.begin(); queue_it != level.storage.orders.end(); ++queue_it)
-                {
-                    auto order_entry = orders_.find(*queue_it);
-                    assert(order_entry != orders_.end());
-                    order_entry->second.queue_it = queue_it;
-                }
-            }
+        return [this](id_type lookup_id) -> detail::intrusive_fifo_node<id_type>& {
+            auto it = orders_.find(lookup_id);
+            assert(it != orders_.end());
+            return it->second.fifo_node;
         };
-
-        relink_levels(bids_);
-        relink_levels(asks_);
     }
 
     static constexpr size_type size_ =
