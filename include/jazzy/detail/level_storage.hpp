@@ -1,7 +1,8 @@
 #pragma once
 
-#include <list>
 #include <jazzy/traits.hpp>
+#include <jazzy/detail/intrusive_fifo.hpp>
+#include <optional>
 #include <memory_resource>
 
 namespace jazzy {
@@ -28,29 +29,27 @@ struct fifo_level_storage
 {
     using order_type = OrderType;
     using id_type = order_id_type<order_type>;
-    using order_queue = std::pmr::list<id_type>;
-    using queue_iterator = typename order_queue::iterator;
+    using queue_type = intrusive_fifo_queue<id_type>;
 
-    order_queue orders;
+    queue_type queue;
 
     fifo_level_storage() = default;
 
     fifo_level_storage(const fifo_level_storage&) = default;
-    fifo_level_storage(fifo_level_storage&&) noexcept(std::is_nothrow_move_constructible_v<order_queue>) = default;
+    fifo_level_storage(fifo_level_storage&&) noexcept(std::is_nothrow_move_constructible_v<queue_type>) = default;
     fifo_level_storage& operator=(const fifo_level_storage&) = default;
-    fifo_level_storage& operator=(fifo_level_storage&&) noexcept(std::is_nothrow_move_assignable_v<order_queue>) =
+    fifo_level_storage& operator=(fifo_level_storage&&) noexcept(std::is_nothrow_move_assignable_v<queue_type>) =
         default;
 
-    explicit fifo_level_storage(std::pmr::memory_resource* resource)
-        : orders(resource)
+    explicit fifo_level_storage(std::pmr::memory_resource* /*resource*/)
     {}
 
-    fifo_level_storage(const fifo_level_storage& other, std::pmr::memory_resource* resource)
-        : orders(other.orders, resource)
+    fifo_level_storage(const fifo_level_storage& other, std::pmr::memory_resource* /*resource*/)
+        : queue(other.queue)
     {}
 
-    fifo_level_storage(fifo_level_storage&& other, std::pmr::memory_resource* resource)
-        : orders(std::move(other.orders), resource)
+    fifo_level_storage(fifo_level_storage&& other, std::pmr::memory_resource* /*resource*/)
+        : queue(std::move(other.queue))
     {}
 };
 

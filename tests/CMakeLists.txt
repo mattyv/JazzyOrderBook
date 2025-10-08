@@ -4,6 +4,7 @@ add_executable(${PROJECT_NAME}
     orderbook_tests.cpp
     fifo_orderbook_tests.cpp
     fifo_map_orderbook_tests.cpp
+    intrusive_fifo_tests.cpp
     select_nth_test.cpp
     tick_type_strong_tests.cpp
     best_price_regression_tests.cpp
