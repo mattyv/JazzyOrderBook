@@ -6,18 +6,19 @@ compile-time market statistics, which allows constant-time volume updates and
 cheap scans to the best bid/ask.
 
 ## Highlights
-- Header-only core exposed through the `jazzy::jazzy` CMake target (requires
-  CMake 3.21+ and a C++23 compiler).
-- Strongly typed ticks and compile-time `market_statistics` describing daily
-  high/low/close data plus an expected trading range.
-- `jazzy::order_book` stores bid/ask levels in contiguous arrays augmented with
-  bitsets to track populated levels and accelerate best price discovery.
-- Concept-based traits let you adapt your own order struct by providing
-  `jazzy_order_*` free functions; misuse is caught at compile time.
-- Reference `map_order_book` baseline together with a Google Benchmark harness
-  for performance comparisons.
-- Comprehensive Catch2 regression suite covering inserts, updates, deletes, and
-  best-price queries.
+- Header-only core shipped as the `jazzy::jazzy` CMake target (C++23 /
+  CMake 3.21+).
+- Compile-time `market_statistics` carve out the tick range, eliminating dynamic
+  allocations and enabling predictable cache-friendly access.
+- Dense vector storage plus population bitsets provide constant-time updates and
+  best-price scans; FIFO adapters cover front-of-queue inspection workloads.
+- Concept-based traits (`jazzy_order_*`) adapt any order structure with
+  compile-time diagnostics for misuse.
+- Benchmarks pit JazzyVector against the map-based aggregate/fifo references,
+  including a portable build variant and scripts to capture hardware-specific
+  "best runs".
+- Python reporting pipeline converts JSON or stored console output into visual
+  comparisons of native versus portable performance.
 
 ## Usage
 
@@ -107,7 +108,21 @@ cmake --build build --target benchmarks_portable
 Sample outputs are stored under `benchmark_results/`. The helper script
 `scripts/benchmark_compare.sh` runs the benchmark, captures the result keyed by
 your CPU (using `scripts/detect_hardware.sh`), and lets you diff against the
-current best run.
+current best run:
+
+```bash
+# Native benchmark vs saved best; promote on demand
+./scripts/benchmark_compare.sh
+
+# Portable baseline (compiler builtins disabled)
+./scripts/benchmark_compare.sh --portable
+
+# View the saved best native vs portable runs side-by-side
+./scripts/benchmark_compare.sh --compare-best
+```
+
+Each run is archived beneath `benchmark_results/<hardware>_best.txt` (and
+`*_portable_best.txt`), making it easy to track regressions over time.
 
 ### Realistic Workload Distribution
 
@@ -127,11 +142,17 @@ The project includes a Python visualization tool to generate performance compari
 # Install dependencies
 pip install -r scripts/requirements.txt
 
+# (Optional) one-shot setup
+bash scripts/setup.sh
+
 # Run benchmarks and generate charts
 python3 scripts/visualize_benchmarks.py
 
 # Use existing benchmark results
 python3 scripts/visualize_benchmarks.py --json-input benchmark_results/your_results.json
+
+# Visualize stored native vs portable best runs
+python3 scripts/visualize_benchmarks.py --use-best
 ```
 
 The script generates several visualization types in the [benchmark_results/](benchmark_results/) directory:
@@ -154,8 +175,8 @@ See [scripts/README.md](scripts/README.md) for detailed usage instructions and i
 - `include/jazzy/detail/select_nth.hpp` – branch-friendly selection helper used inside the
   order book.
 - `include/jazzy/detail/level_bitmap.hpp` – compact bitmap wrapper enabling fast level scans.
-- `scripts/` – helper scripts for benchmarks and local tooling.
-- `benchmark_results/` – archived benchmark runs (keyed by detected hardware).
+- `scripts/` – helper scripts for benchmarks, visualization, and environment setup.
+- `benchmark_results/` – archived benchmark runs and plots (keyed by detected hardware).
 
 ## License
 
