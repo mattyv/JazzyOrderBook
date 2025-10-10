@@ -46,7 +46,9 @@ void recycle_pool(std::vector<Book>& books, std::size_t& next_idx, benchmark::St
 // Random number generator for consistent benchmarking
 jazzy::tests::order generate_random_order(int order_id, std::mt19937& rng)
 {
-    std::uniform_int_distribution<int> tick_dist(90, 130); // Market range
+    constexpr int tick_low = test_market_stats::daily_low_v.value();
+    constexpr int tick_high = test_market_stats::daily_high_v.value();
+    std::uniform_int_distribution<int> tick_dist(tick_low, tick_high);
     std::uniform_int_distribution<int> volume_dist(1, 1000);
 
     return {order_id, volume_dist(rng), tick_dist(rng)};
@@ -204,12 +206,27 @@ static void BM_VolumeLookup_JazzyVector(benchmark::State& state)
     std::vector<int> ticks;
     auto rng = make_rng();
 
+    constexpr int tick_min = test_market_stats::daily_low_v.value();
+    constexpr int tick_max = test_market_stats::daily_high_v.value();
+    constexpr int tick_span = tick_max - tick_min + 1;
+    std::vector<unsigned char> has_bid(static_cast<std::size_t>(tick_span), 0U);
+    std::vector<unsigned char> has_ask(static_cast<std::size_t>(tick_span), 0U);
+
     // Pre-populate the order book
     for (int i = 0; i < state.range(0); ++i)
     {
         auto order = generate_random_order(i, rng);
         ticks.push_back(order.tick);
-        (void)add_random_order(book, order, rng);
+        const bool is_bid = add_random_order(book, order, rng);
+        const std::size_t idx = static_cast<std::size_t>(order.tick - tick_min);
+        if (is_bid)
+        {
+            has_bid[idx] = 1U;
+        }
+        else
+        {
+            has_ask[idx] = 1U;
+        }
     }
 
     // Shuffle ticks for random access pattern
@@ -220,10 +237,20 @@ static void BM_VolumeLookup_JazzyVector(benchmark::State& state)
         // Look up volume at different price levels
         for (auto tick : ticks)
         {
-            auto bid_volume = book.bid_volume_at_tick(tick);
-            auto ask_volume = book.ask_volume_at_tick(tick);
-            benchmark::DoNotOptimize(bid_volume);
-            benchmark::DoNotOptimize(ask_volume);
+            const std::size_t idx = static_cast<std::size_t>(tick - tick_min);
+            int volume = 0;
+            if (has_bid[idx])
+            {
+                volume = book.bid_volume_at_tick(tick);
+            }
+            benchmark::DoNotOptimize(volume);
+
+            volume = 0;
+            if (has_ask[idx])
+            {
+                volume = book.ask_volume_at_tick(tick);
+            }
+            benchmark::DoNotOptimize(volume);
         }
     }
     state.SetComplexityN(state.range(0));
@@ -235,12 +262,27 @@ static void BM_VolumeLookup_MapAggregate(benchmark::State& state)
     std::vector<int> ticks;
     auto rng = make_rng();
 
+    constexpr int tick_min = test_market_stats::daily_low_v.value();
+    constexpr int tick_max = test_market_stats::daily_high_v.value();
+    constexpr int tick_span = tick_max - tick_min + 1;
+    std::vector<unsigned char> has_bid(static_cast<std::size_t>(tick_span), 0U);
+    std::vector<unsigned char> has_ask(static_cast<std::size_t>(tick_span), 0U);
+
     // Pre-populate the order book
     for (int i = 0; i < state.range(0); ++i)
     {
         auto order = generate_random_order(i, rng);
         ticks.push_back(order.tick);
-        (void)add_random_order(book, order, rng);
+        const bool is_bid = add_random_order(book, order, rng);
+        const std::size_t idx = static_cast<std::size_t>(order.tick - tick_min);
+        if (is_bid)
+        {
+            has_bid[idx] = 1U;
+        }
+        else
+        {
+            has_ask[idx] = 1U;
+        }
     }
 
     // Shuffle ticks for random access pattern
@@ -251,10 +293,20 @@ static void BM_VolumeLookup_MapAggregate(benchmark::State& state)
         // Look up volume at different price levels
         for (auto tick : ticks)
         {
-            auto bid_volume = book.bid_volume_at_tick(tick);
-            auto ask_volume = book.ask_volume_at_tick(tick);
-            benchmark::DoNotOptimize(bid_volume);
-            benchmark::DoNotOptimize(ask_volume);
+            const std::size_t idx = static_cast<std::size_t>(tick - tick_min);
+            int volume = 0;
+            if (has_bid[idx])
+            {
+                volume = book.bid_volume_at_tick(tick);
+            }
+            benchmark::DoNotOptimize(volume);
+
+            volume = 0;
+            if (has_ask[idx])
+            {
+                volume = book.ask_volume_at_tick(tick);
+            }
+            benchmark::DoNotOptimize(volume);
         }
     }
     state.SetComplexityN(state.range(0));
@@ -609,12 +661,21 @@ static void BM_GetLevelSnapshot_JazzyVector(benchmark::State& state)
     for (auto _ : state)
     {
         // Access orders at different levels - scale with input but cap at 20
-        const size_t max_levels = std::min(size_t(20), static_cast<size_t>(state.range(0)));
-        for (size_t level = 0; level < max_levels; ++level)
+        const size_t level_cap = std::min<size_t>(20, static_cast<size_t>(state.range(0)));
+
+        const size_t bid_levels =
+            std::min(level_cap, static_cast<size_t>(book.bid_bitmap().count()));
+        for (size_t level = 0; level < bid_levels; ++level)
         {
             auto bid_order = book.bid_at_level(level);
-            auto ask_order = book.ask_at_level(level);
             benchmark::DoNotOptimize(bid_order);
+        }
+
+        const size_t ask_levels =
+            std::min(level_cap, static_cast<size_t>(book.ask_bitmap().count()));
+        for (size_t level = 0; level < ask_levels; ++level)
+        {
+            auto ask_order = book.ask_at_level(level);
             benchmark::DoNotOptimize(ask_order);
         }
     }
