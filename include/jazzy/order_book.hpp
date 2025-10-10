@@ -267,8 +267,7 @@ public:
     void insert_bid(tick_type tick_value, U&& order)
     {
         tick_type_strong tick_strong{tick_value};
-        if (tick_strong > MarketStats::daily_high_v || tick_strong < MarketStats::daily_low_v)
-            return;
+        assert (tick_strong <= MarketStats::daily_high_v && tick_strong >= MarketStats::daily_low_v);
 
         auto volume = order_volume_getter(order);
         auto order_id = order_id_getter(order);
@@ -289,7 +288,9 @@ public:
         }
 
         if (!best_bid_.has_value() || tick_strong > best_bid_)
+        {
             best_bid_ = tick_strong;
+        }
 
         update_bitsets<true>(true, index);
     }
@@ -299,8 +300,7 @@ public:
     void insert_ask(tick_type tick_value, U&& order)
     {
         tick_type_strong tick_strong{tick_value};
-        if (tick_strong > MarketStats::daily_high_v || tick_strong < MarketStats::daily_low_v)
-            return;
+        assert (tick_strong <= MarketStats::daily_high_v && tick_strong >= MarketStats::daily_low_v);
 
         auto volume = order_volume_getter(order);
         auto order_id = order_id_getter(order);
@@ -321,7 +321,9 @@ public:
         }
 
         if (!best_ask_.has_value() || tick_strong < best_ask_)
+        {
             best_ask_ = tick_strong;
+        }
 
         update_bitsets<false>(true, index);
     }
@@ -331,8 +333,7 @@ public:
     void update_bid(tick_type tick_value, U&& order)
     {
         tick_type_strong tick_strong{tick_value};
-        if (tick_strong > MarketStats::daily_high_v || tick_strong < MarketStats::daily_low_v)
-            return;
+        assert (tick_strong <= MarketStats::daily_high_v && tick_strong >= MarketStats::daily_low_v);
 
         auto order_id = order_id_getter(order);
         auto it = orders_.find(order_id);
@@ -342,68 +343,54 @@ public:
         auto original_volume = order_volume_getter(it->second.order);
         auto supplied_volume = order_volume_getter(order);
 
-        if (tick_strong == original_tick && supplied_volume == original_volume)
-            return;
-
         order_volume_setter(it->second.order, supplied_volume);
         order_tick_setter(it->second.order, tick_strong.value());
 
-        if (tick_strong == original_tick)
+        // Compute common values unconditionally
+        const bool price_changed = (tick_strong != original_tick);
+        const auto volume_delta = supplied_volume - original_volume;
+        const size_type old_index = tick_to_index(original_tick);
+        const size_type new_index = tick_to_index(tick_strong);
+
+        // Update old price level (common to both paths)
+        bids_[old_index].volume += price_changed ? -original_volume : volume_delta;
+        update_bitsets<true>(bids_[old_index].volume != 0, old_index);
+
+        // Handle FIFO queue for old level
+        if constexpr (is_fifo_enabled)
         {
-            auto volume_delta = supplied_volume - original_volume;
-            size_type index = tick_to_index(original_tick);
-            bids_[index].volume += volume_delta;
-            const bool has_volume = bids_[index].volume != 0;
-            update_bitsets<true>(has_volume, index);
-
-            // If volume increased, move order to back of the queue (lose priority)
-            if constexpr (is_fifo_enabled)
+            auto node_lookup = make_node_lookup();
+            if (price_changed)
             {
-                if (volume_delta > 0)
-                {
-                    auto node_lookup = make_node_lookup();
-                    bids_[index].storage.queue.move_to_back(order_id, node_lookup);
-                }
-                // If volume decreased, keep position in queue
-            }
-
-            if (volume_delta < 0 && original_tick == best_bid_ && !has_volume)
-            {
-                best_bid_ = scan_for_best_bid();
-            }
-        }
-        else
-        {
-            size_type old_index = tick_to_index(original_tick);
-            bids_[old_index].volume -= original_volume;
-            update_bitsets<true>(bids_[old_index].volume != 0, old_index);
-
-            // Remove from old price level's queue
-            if constexpr (is_fifo_enabled)
-            {
-                auto node_lookup = make_node_lookup();
                 bids_[old_index].storage.queue.erase(order_id, node_lookup);
             }
+            else if (volume_delta > 0)
+            {
+                bids_[old_index].storage.queue.move_to_back(order_id, node_lookup);
+            }
+        }
 
-            size_type new_index = tick_to_index(tick_strong);
+        // Update new price level only if price changed
+        if (price_changed)
+        {
             bids_[new_index].volume += supplied_volume;
             update_bitsets<true>(true, new_index);
 
-            // Add to new price level's queue
             if constexpr (is_fifo_enabled)
             {
                 auto node_lookup = make_node_lookup();
                 bids_[new_index].storage.queue.push_back(order_id, node_lookup);
             }
+        }
 
-            if (tick_strong > best_bid_)
-            {
-                best_bid_ = tick_strong;
-            }
-            else if (original_tick == best_bid_ && bids_[old_index].volume == 0)
-            {
-                best_bid_ = scan_for_best_bid();
-            }
+        // Update best bid
+        if (price_changed && tick_strong > best_bid_)
+        {
+            best_bid_ = tick_strong;
+        }
+        else if (bids_[old_index].volume == 0 && original_tick == best_bid_)
+        {
+            best_bid_ = scan_for_best_bid();
         }
     }
 
@@ -412,8 +399,7 @@ public:
     void update_ask(tick_type tick_value, U&& order)
     {
         tick_type_strong tick_strong{tick_value};
-        if (tick_strong > MarketStats::daily_high_v || tick_strong < MarketStats::daily_low_v)
-            return;
+        assert (tick_strong <= MarketStats::daily_high_v && tick_strong >= MarketStats::daily_low_v);
 
         auto order_id = order_id_getter(order);
         auto it = orders_.find(order_id);
@@ -423,68 +409,54 @@ public:
         auto original_volume = order_volume_getter(it->second.order);
         auto supplied_volume = order_volume_getter(order);
 
-        if (tick_strong == original_tick && supplied_volume == original_volume)
-            return;
-
         order_volume_setter(it->second.order, supplied_volume);
         order_tick_setter(it->second.order, tick_strong.value());
 
-        if (tick_strong == original_tick)
+        // Compute common values unconditionally
+        const bool price_changed = (tick_strong != original_tick);
+        const auto volume_delta = supplied_volume - original_volume;
+        const size_type old_index = tick_to_index(original_tick);
+        const size_type new_index = tick_to_index(tick_strong);
+
+        // Update old price level (common to both paths)
+        asks_[old_index].volume += price_changed ? -original_volume : volume_delta;
+        update_bitsets<false>(asks_[old_index].volume != 0, old_index);
+
+        // Handle FIFO queue for old level
+        if constexpr (is_fifo_enabled)
         {
-            auto volume_delta = supplied_volume - original_volume;
-            size_type index = tick_to_index(original_tick);
-            asks_[index].volume += volume_delta;
-            const bool has_volume = asks_[index].volume != 0;
-            update_bitsets<false>(has_volume, index);
-
-            // If volume increased, move order to back of the queue (lose priority)
-            if constexpr (is_fifo_enabled)
+            auto node_lookup = make_node_lookup();
+            if (price_changed)
             {
-                if (volume_delta > 0)
-                {
-                    auto node_lookup = make_node_lookup();
-                    asks_[index].storage.queue.move_to_back(order_id, node_lookup);
-                }
-                // If volume decreased, keep position in queue
-            }
-
-            if (volume_delta < 0 && original_tick == best_ask_ && !has_volume)
-            {
-                best_ask_ = scan_for_best_ask();
-            }
-        }
-        else
-        {
-            size_type old_index = tick_to_index(original_tick);
-            asks_[old_index].volume -= original_volume;
-            update_bitsets<false>(asks_[old_index].volume != 0, old_index);
-
-            // Remove from old price level's queue
-            if constexpr (is_fifo_enabled)
-            {
-                auto node_lookup = make_node_lookup();
                 asks_[old_index].storage.queue.erase(order_id, node_lookup);
             }
+            else if (volume_delta > 0)
+            {
+                asks_[old_index].storage.queue.move_to_back(order_id, node_lookup);
+            }
+        }
 
-            size_type new_index = tick_to_index(tick_strong);
+        // Update new price level only if price changed
+        if (price_changed)
+        {
             asks_[new_index].volume += supplied_volume;
             update_bitsets<false>(true, new_index);
 
-            // Add to new price level's queue
             if constexpr (is_fifo_enabled)
             {
                 auto node_lookup = make_node_lookup();
                 asks_[new_index].storage.queue.push_back(order_id, node_lookup);
             }
+        }
 
-            if (tick_strong < best_ask_)
-            {
-                best_ask_ = tick_strong;
-            }
-            else if (original_tick == best_ask_ && asks_[old_index].volume == 0)
-            {
-                best_ask_ = scan_for_best_ask();
-            }
+        // Update best ask
+        if (price_changed && tick_strong < best_ask_)
+        {
+            best_ask_ = tick_strong;
+        }
+        else if (asks_[old_index].volume == 0 && original_tick == best_ask_)
+        {
+            best_ask_ = scan_for_best_ask();
         }
     }
 
@@ -493,8 +465,7 @@ public:
     void remove_bid(tick_type tick_value, U&& order)
     {
         tick_type_strong tick_strong{tick_value};
-        if (tick_strong > MarketStats::daily_high_v || tick_strong < MarketStats::daily_low_v)
-            return;
+        assert (tick_strong <= MarketStats::daily_high_v && tick_strong >= MarketStats::daily_low_v);
 
         auto it = orders_.find(order_id_getter(order));
         assert(it != orders_.end());
@@ -517,6 +488,7 @@ public:
         if (bids_[index].volume == 0)
         {
             update_bitsets<true>(false, index);
+
             if (best_bid_.has_value() && tick_strong == best_bid_)
             {
                 best_bid_ = scan_for_best_bid();
@@ -529,8 +501,7 @@ public:
     void remove_ask(tick_type tick_value, U&& order)
     {
         tick_type_strong tick_strong{tick_value};
-        if (tick_strong > MarketStats::daily_high_v || tick_strong < MarketStats::daily_low_v)
-            return;
+        assert (tick_strong <= MarketStats::daily_high_v && tick_strong >= MarketStats::daily_low_v);
 
         auto it = orders_.find(order_id_getter(order));
         assert(it != orders_.end());
@@ -553,6 +524,7 @@ public:
         if (asks_[index].volume == 0)
         {
             update_bitsets<false>(false, index);
+
             if (best_ask_.has_value() && tick_strong == best_ask_)
             {
                 best_ask_ = scan_for_best_ask();
@@ -563,11 +535,8 @@ public:
     order_type get_order(id_type id) const
     {
         auto it = orders_.find(id);
-        if (it != orders_.end())
-        {
-            return it->second.order;
-        }
-        throw std::out_of_range("Order ID not found");
+        assert(it != orders_.end());
+        return it->second.order;
     }
 
     volume_type bid_volume_at_tick(tick_type tick_value)
@@ -751,17 +720,14 @@ public:
     tick_type_strong scan_for_best_bid() const
     {
         const int index = bid_bitmap_.find_highest();
-        if (index < 0)
-            return tick_type_strong::no_value();
-        return index_to_tick(static_cast<size_type>(index));
+
+        return (index < 0) ? tick_type_strong::no_value() : index_to_tick(static_cast<size_type>(index));
     }
 
     tick_type_strong scan_for_best_ask() const
     {
         const int index = ask_bitmap_.find_lowest();
-        if (index < 0)
-            return tick_type_strong::no_value();
-        return index_to_tick(static_cast<size_type>(index));
+        return (index < 0) ? tick_type_strong::no_value() : index_to_tick(static_cast<size_type>(index));
     }
 
     template <bool is_bid>

@@ -13,6 +13,26 @@
 #include <intrin.h>
 #endif
 
+#ifndef JAZZY_CPU_X86
+#if defined(__x86_64__) || defined(__i386__) || defined(_M_X64) || defined(_M_IX86)
+#define JAZZY_CPU_X86 1
+#else
+#define JAZZY_CPU_X86 0
+#endif
+#endif
+
+#ifndef JAZZY_HAS_BMI2
+#if JAZZY_CPU_X86 && (defined(__BMI2__) || (defined(_MSC_VER) && (defined(__AVX2__) || defined(__AVX512F__))))
+#define JAZZY_HAS_BMI2 1
+#else
+#define JAZZY_HAS_BMI2 0
+#endif
+#endif
+
+#if JAZZY_HAS_BMI2
+#include <immintrin.h>
+#endif
+
 #if defined(__clang__) || defined(__GNUC__)
 #define JAZZY_HAS_NO_SANITIZE_UNDEFINED 1
 #define JAZZY_NO_SANITIZE_UNDEFINED __attribute__((no_sanitize("undefined")))
@@ -264,7 +284,8 @@ public:
     {
         assert(index < N && "level_bitmap::set index out of range");
         const auto [block, mask] = block_and_mask(index);
-        const bool currently_set = (blocks_[block] & mask) != 0;
+        std::uint64_t& word = blocks_[block];
+        const bool currently_set = (word & mask) != 0;
         if (currently_set == value)
         {
             return;
@@ -272,12 +293,12 @@ public:
 
         if (value)
         {
-            blocks_[block] |= mask;
+            word |= mask;
             ++total_popcount_;
         }
         else
         {
-            blocks_[block] &= ~mask;
+            word &= ~mask;
             assert(total_popcount_ > 0);
             --total_popcount_;
         }
@@ -320,11 +341,7 @@ public:
 
     [[nodiscard]] std::size_t select_from_low(std::size_t rank) const
     {
-        if (rank >= total_popcount_)
-        {
-            throw std::out_of_range("rank out of range");
-        }
-
+        assert(rank < total_popcount_);
         std::size_t remaining = rank;
         for (std::size_t block = 0; block < block_count; ++block)
         {
@@ -332,27 +349,33 @@ public:
             const std::size_t block_pop = level_bitmap_detail::popcount(word);
             if (remaining < block_pop)
             {
+                std::size_t bit_offset{};
+#if JAZZY_HAS_BMI2
+                assert(remaining < 64);
+                const std::uint64_t selected_bit =
+                    _pdep_u64(1ull << static_cast<unsigned int>(remaining), word);
+                assert(selected_bit != 0);
+                bit_offset = static_cast<std::size_t>(level_bitmap_detail::lsb_index(selected_bit));
+#else
                 for (std::size_t i = 0; i < remaining; ++i)
                 {
                     word &= word - 1; // drop lowest set bit
                 }
                 assert(word != 0);
-                const auto bit_offset = static_cast<std::size_t>(level_bitmap_detail::lsb_index(word));
+                bit_offset = static_cast<std::size_t>(level_bitmap_detail::lsb_index(word));
+#endif
                 return block * bits_per_block + bit_offset;
             }
             remaining -= block_pop;
         }
 
-        throw std::logic_error("Failed to locate bit in level_bitmap");
+        assert(false && "Failed to locate bit in level_bitmap");
+        return 0;
     }
 
     [[nodiscard]] std::size_t select_from_high(std::size_t rank) const
     {
-        if (rank >= total_popcount_)
-        {
-            throw std::out_of_range("rank out of range");
-        }
-
+        assert(rank < total_popcount_);
         std::size_t remaining = rank;
         for (std::size_t block = block_count; block > 0;)
         {
@@ -368,7 +391,8 @@ public:
             remaining -= block_pop;
         }
 
-        throw std::logic_error("Failed to locate bit in level_bitmap");
+        assert(false && "Failed to locate bit in level_bitmap");
+        return 0;
     }
 
 private:
@@ -408,7 +432,7 @@ public:
     void set(std::size_t index, bool value) noexcept
     {
         assert(index < N && "level_bitmap::set index out of range");
-        const auto mask = 1ull << index;
+        const std::uint64_t mask = 1ull << index;
         const bool currently_set = (bits_ & mask) != 0;
         if (currently_set == value)
         {
@@ -435,28 +459,17 @@ public:
 
     [[nodiscard]] int find_lowest() const noexcept
     {
-        if (bits_ == 0)
-        {
-            return -1;
-        }
-        return level_bitmap_detail::lsb_index(bits_);
+        return (bits_ == 0) ? -1 : level_bitmap_detail::lsb_index(bits_);
     }
 
     [[nodiscard]] int find_highest() const noexcept
     {
-        if (bits_ == 0)
-        {
-            return -1;
-        }
-        return static_cast<int>(level_bitmap_detail::select_bit_from_msb(bits_, 0));
+        return (bits_ == 0) ? -1 : static_cast<int>(level_bitmap_detail::select_bit_from_msb(bits_, 0));
     }
 
     [[nodiscard]] std::size_t select_from_low(std::size_t rank) const
     {
-        if (rank >= total_popcount_)
-        {
-            throw std::out_of_range("rank out of range");
-        }
+        assert(rank < total_popcount_);
 
         std::uint64_t word = bits_;
         for (std::size_t i = 0; i < rank; ++i)
@@ -469,11 +482,7 @@ public:
 
     [[nodiscard]] std::size_t select_from_high(std::size_t rank) const
     {
-        if (rank >= total_popcount_)
-        {
-            throw std::out_of_range("rank out of range");
-        }
-
+        assert(rank < total_popcount_);
         return static_cast<std::size_t>(
             level_bitmap_detail::select_bit_from_msb(bits_, static_cast<unsigned int>(rank)));
     }
