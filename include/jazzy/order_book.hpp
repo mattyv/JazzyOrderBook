@@ -564,21 +564,10 @@ public:
         // scanning from best bid to low
         // so level 0 is the highest bid
         // level 1 is the next highest bid, etc
-        if (!best_bid_.has_value())
-        {
-            // No bids exist, return empty order
-            order_type dummy_order{};
-            order_volume_setter(dummy_order, 0);
-            order_tick_setter(dummy_order, tick_type{});
-            return dummy_order;
-        }
         const size_type total_levels = static_cast<size_type>(bid_bitmap_.count());
         if (level >= total_levels)
         {
-            order_type dummy_order{};
-            order_volume_setter(dummy_order, 0);
-            order_tick_setter(dummy_order, tick_type{});
-            return dummy_order;
+            return order_type{};
         }
 
         const size_t index = bid_bitmap_.select_from_high(static_cast<size_t>(level));
@@ -596,22 +585,10 @@ public:
         // scanning from best ask to high
         // so level 0 is the lowest ask
         // level 1 is the next lowest ask, etc
-        if (!best_ask_.has_value())
-        {
-            // No asks exist, return empty order
-            order_type dummy_order{};
-            order_volume_setter(dummy_order, 0);
-            order_tick_setter(dummy_order, tick_type{});
-            return dummy_order;
-        }
-
         const size_type total_levels = static_cast<size_type>(ask_bitmap_.count());
         if (level >= total_levels)
         {
-            order_type dummy_order{};
-            order_volume_setter(dummy_order, 0);
-            order_tick_setter(dummy_order, tick_type{});
-            return dummy_order;
+            return order_type{};
         }
 
         const size_t index = ask_bitmap_.select_from_low(static_cast<size_t>(level));
