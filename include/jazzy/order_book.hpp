@@ -16,6 +16,8 @@
 #include <jazzy/detail/level_bitmap.hpp>
 #include <jazzy/detail/intrusive_fifo.hpp>
 #include <jazzy/detail/level_storage.hpp>
+#include <jazzy/detail/zero_volume_policy.hpp>
+#include <jazzy/detail/bounds_policy.hpp>
 
 namespace jazzy {
 
@@ -23,7 +25,9 @@ template <
     typename TickType,
     typename OrderType,
     typename MarketStats,
-    typename LevelStorage = detail::aggregate_level_storage<OrderType>>
+    typename LevelStorage = detail::aggregate_level_storage<OrderType>,
+    typename ZeroVolumePolicy = detail::zero_volume_as_valid_policy,
+    typename BoundsPolicy = detail::bounds_check_assert_policy>
 requires tick<TickType> && order<OrderType> && market_stats<MarketStats> &&
     std::same_as<typename MarketStats::tick_type, TickType>
 class order_book
@@ -69,6 +73,11 @@ public:
 
 private:
     using tick_type_strong = typename MarketStats::tick_type_strong_t;
+
+    // Internal enum for better readability in template calls
+    enum class Side { Bid, Ask };
+    static constexpr Side BID = Side::Bid;
+    static constexpr Side ASK = Side::Ask;
 
     // When FIFO is enabled, we need to track where each order lives in the deque
     // Use EBO to guarantee zero overhead for aggregate-only orderbooks
@@ -274,330 +283,42 @@ public:
     requires order<U> && std::same_as<order_type, std::decay_t<U>>
     void insert_bid(tick_type tick_value, U&& order)
     {
-        tick_type_strong tick_strong{tick_value};
-        assert (tick_strong <= MarketStats::daily_high_v && tick_strong >= MarketStats::daily_low_v);
-
-        auto volume = order_volume_getter(order);
-        auto order_id = order_id_getter(order);
-        auto [it, succ] = orders_.try_emplace(order_id, order_data{std::forward<U>(order)});
-
-        assert(succ && "Order ID already exists");
-
-        order_tick_setter(it->second.order, tick_strong.value());
-
-        size_type index = tick_to_index(tick_strong);
-        bids_[index].volume += volume;
-
-        // If FIFO is enabled, add this order to the back of the queue for this price level
-        if constexpr (is_fifo_enabled)
-        {
-            auto node_lookup = make_node_lookup();
-            bids_[index].storage.queue.push_back(order_id, node_lookup);
-        }
-
-        if (!best_bid_.has_value() || tick_strong > best_bid_)
-        {
-            best_bid_ = tick_strong;
-        }
-
-        update_bitsets<true>(true, index);
+        insert_order_impl<BID>(tick_value, std::forward<U>(order));
     }
 
     template <typename U>
     requires order<U> && std::same_as<order_type, std::decay_t<U>>
     void insert_ask(tick_type tick_value, U&& order)
     {
-        tick_type_strong tick_strong{tick_value};
-        assert (tick_strong <= MarketStats::daily_high_v && tick_strong >= MarketStats::daily_low_v);
-
-        auto volume = order_volume_getter(order);
-        auto order_id = order_id_getter(order);
-        auto [it, succ] = orders_.try_emplace(order_id, order_data{std::forward<U>(order)});
-
-        assert(succ && "Order ID already exists");
-
-        order_tick_setter(it->second.order, tick_strong.value());
-
-        size_type index = tick_to_index(tick_strong);
-        asks_[index].volume += volume;
-
-        // If FIFO is enabled, add this order to the back of the queue for this price level
-        if constexpr (is_fifo_enabled)
-        {
-            auto node_lookup = make_node_lookup();
-            asks_[index].storage.queue.push_back(order_id, node_lookup);
-        }
-
-        if (!best_ask_.has_value() || tick_strong < best_ask_)
-        {
-            best_ask_ = tick_strong;
-        }
-
-        update_bitsets<false>(true, index);
+        insert_order_impl<ASK>(tick_value, std::forward<U>(order));
     }
 
     template <typename U>
     requires order<U> && std::same_as<order_type, std::decay_t<U>>
     void update_bid(tick_type tick_value, U&& order)
     {
-        tick_type_strong tick_strong{tick_value};
-        assert (tick_strong <= MarketStats::daily_high_v && tick_strong >= MarketStats::daily_low_v);
-
-        auto order_id = order_id_getter(order);
-        auto it = orders_.find(order_id);
-        assert(it != orders_.end());
-
-        auto& order_entry = it->second;
-        auto& stored_order = order_entry.order;
-
-        auto original_tick = tick_type_strong(order_tick_getter(stored_order));
-        auto original_volume = order_volume_getter(stored_order);
-        auto supplied_volume = order_volume_getter(order);
-
-        order_volume_setter(stored_order, supplied_volume);
-        order_tick_setter(stored_order, tick_strong.value());
-
-        // Compute common values unconditionally
-        const bool price_changed = (tick_strong != original_tick);
-        // Use signed type for volume_delta to handle both increases and decreases safely
-        const make_signed_volume_t<volume_type> volume_delta =
-            static_cast<make_signed_volume_t<volume_type>>(supplied_volume) -
-            static_cast<make_signed_volume_t<volume_type>>(original_volume);
-        const size_type old_index = tick_to_index(original_tick);
-        const size_type new_index = tick_to_index(tick_strong);
-
-        // Update old price level (common to both paths)
-        // Use signed arithmetic then convert back to volume_type to avoid underflow issues
-        const auto signed_original = static_cast<make_signed_volume_t<volume_type>>(original_volume);
-        const auto volume_adjustment = price_changed ? -signed_original : volume_delta;
-        bids_[old_index].volume = static_cast<volume_type>(
-            static_cast<make_signed_volume_t<volume_type>>(bids_[old_index].volume) + volume_adjustment);
-        update_bitsets<true>(bids_[old_index].volume != 0, old_index);
-
-        // Handle FIFO queue for old level
-        if constexpr (is_fifo_enabled)
-        {
-            auto& node = order_entry.fifo_node;
-            auto node_lookup = make_node_lookup();
-            if (price_changed)
-            {
-                if (node.in_queue)
-                {
-                    bids_[old_index].storage.queue.erase(order_id, node_lookup);
-                }
-            }
-            else if (supplied_volume == 0)
-            {
-                if (node.in_queue)
-                {
-                    bids_[old_index].storage.queue.erase(order_id, node_lookup);
-                }
-            }
-            else if (volume_delta > 0)
-            {
-                bids_[old_index].storage.queue.move_to_back(order_id, node_lookup);
-            }
-        }
-
-        // Update new price level only if price changed
-        if (price_changed)
-        {
-            bids_[new_index].volume += supplied_volume;
-            update_bitsets<true>(bids_[new_index].volume != 0, new_index);
-
-            if constexpr (is_fifo_enabled)
-            {
-                if (supplied_volume != 0)
-                {
-                    auto node_lookup = make_node_lookup();
-                    bids_[new_index].storage.queue.push_back(order_id, node_lookup);
-                }
-            }
-        }
-
-        // Update best bid
-        if (price_changed && tick_strong > best_bid_)
-        {
-            best_bid_ = tick_strong;
-        }
-        else if (bids_[old_index].volume == 0 && original_tick == best_bid_)
-        {
-            best_bid_ = scan_for_best_bid();
-        }
+        update_order_impl<BID>(tick_value, std::forward<U>(order));
     }
 
     template <typename U>
     requires order<U> && std::same_as<order_type, std::decay_t<U>>
     void update_ask(tick_type tick_value, U&& order)
     {
-        tick_type_strong tick_strong{tick_value};
-        assert (tick_strong <= MarketStats::daily_high_v && tick_strong >= MarketStats::daily_low_v);
-
-        auto order_id = order_id_getter(order);
-        auto it = orders_.find(order_id);
-        assert(it != orders_.end());
-
-        auto& order_entry = it->second;
-        auto& stored_order = order_entry.order;
-
-        auto original_tick = tick_type_strong(order_tick_getter(stored_order));
-        auto original_volume = order_volume_getter(stored_order);
-        auto supplied_volume = order_volume_getter(order);
-
-        order_volume_setter(stored_order, supplied_volume);
-        order_tick_setter(stored_order, tick_strong.value());
-
-        // Compute common values unconditionally
-        const bool price_changed = (tick_strong != original_tick);
-        // Use signed type for volume_delta to handle both increases and decreases safely
-        const make_signed_volume_t<volume_type> volume_delta =
-            static_cast<make_signed_volume_t<volume_type>>(supplied_volume) -
-            static_cast<make_signed_volume_t<volume_type>>(original_volume);
-        const size_type old_index = tick_to_index(original_tick);
-        const size_type new_index = tick_to_index(tick_strong);
-
-        // Update old price level (common to both paths)
-        // Use signed arithmetic then convert back to volume_type to avoid underflow issues
-        const auto signed_original = static_cast<make_signed_volume_t<volume_type>>(original_volume);
-        const auto volume_adjustment = price_changed ? -signed_original : volume_delta;
-        asks_[old_index].volume = static_cast<volume_type>(
-            static_cast<make_signed_volume_t<volume_type>>(asks_[old_index].volume) + volume_adjustment);
-        update_bitsets<false>(asks_[old_index].volume != 0, old_index);
-
-        // Handle FIFO queue for old level
-        if constexpr (is_fifo_enabled)
-        {
-            auto& node = order_entry.fifo_node;
-            auto node_lookup = make_node_lookup();
-            if (price_changed)
-            {
-                if (node.in_queue)
-                {
-                    asks_[old_index].storage.queue.erase(order_id, node_lookup);
-                }
-            }
-            else if (supplied_volume == 0)
-            {
-                if (node.in_queue)
-                {
-                    asks_[old_index].storage.queue.erase(order_id, node_lookup);
-                }
-            }
-            else if (volume_delta > 0)
-            {
-                asks_[old_index].storage.queue.move_to_back(order_id, node_lookup);
-            }
-        }
-
-        // Update new price level only if price changed
-        if (price_changed)
-        {
-            asks_[new_index].volume += supplied_volume;
-            update_bitsets<false>(asks_[new_index].volume != 0, new_index);
-
-            if constexpr (is_fifo_enabled)
-            {
-                if (supplied_volume != 0)
-                {
-                    auto node_lookup = make_node_lookup();
-                    asks_[new_index].storage.queue.push_back(order_id, node_lookup);
-                }
-            }
-        }
-
-        // Update best ask
-        if (price_changed && tick_strong < best_ask_)
-        {
-            best_ask_ = tick_strong;
-        }
-        else if (asks_[old_index].volume == 0 && original_tick == best_ask_)
-        {
-            best_ask_ = scan_for_best_ask();
-        }
+        update_order_impl<ASK>(tick_value, std::forward<U>(order));
     }
 
     template <typename U>
     requires order<U> && std::same_as<order_type, std::decay_t<U>>
     void remove_bid(tick_type tick_value, U&& order)
     {
-        tick_type_strong tick_strong{tick_value};
-        assert (tick_strong <= MarketStats::daily_high_v && tick_strong >= MarketStats::daily_low_v);
-
-        const auto order_id = order_id_getter(order);
-        auto it = orders_.find(order_id);
-        assert(it != orders_.end());
-
-        auto& order_entry = it->second;
-        auto original_volume = order_volume_getter(order_entry.order);
-
-        size_type index = tick_to_index(tick_strong);
-
-        // Remove from FIFO queue before erasing from map
-        if constexpr (is_fifo_enabled)
-        {
-            auto& node = order_entry.fifo_node;
-            if (node.in_queue)
-            {
-                auto node_lookup = make_node_lookup();
-                bids_[index].storage.queue.erase(order_id, node_lookup);
-            }
-        }
-
-        orders_.erase(it);
-
-        bids_[index].volume -= original_volume;
-
-        if (bids_[index].volume == 0)
-        {
-            update_bitsets<true>(false, index);
-
-            if (best_bid_.has_value() && tick_strong == best_bid_)
-            {
-                best_bid_ = scan_for_best_bid();
-            }
-        }
+        remove_order_impl<BID>(tick_value, std::forward<U>(order));
     }
 
     template <typename U>
     requires order<U> && std::same_as<order_type, std::decay_t<U>>
     void remove_ask(tick_type tick_value, U&& order)
     {
-        tick_type_strong tick_strong{tick_value};
-        assert (tick_strong <= MarketStats::daily_high_v && tick_strong >= MarketStats::daily_low_v);
-
-        const auto order_id = order_id_getter(order);
-        auto it = orders_.find(order_id);
-        assert(it != orders_.end());
-
-        auto& order_entry = it->second;
-        auto original_volume = order_volume_getter(order_entry.order);
-
-        size_type index = tick_to_index(tick_strong);
-
-        // Remove from FIFO queue before erasing from map
-        if constexpr (is_fifo_enabled)
-        {
-            auto& node = order_entry.fifo_node;
-            if (node.in_queue)
-            {
-                auto node_lookup = make_node_lookup();
-                asks_[index].storage.queue.erase(order_id, node_lookup);
-            }
-        }
-
-        orders_.erase(it);
-
-        asks_[index].volume -= original_volume;
-
-        if (asks_[index].volume == 0)
-        {
-            update_bitsets<false>(false, index);
-
-            if (best_ask_.has_value() && tick_strong == best_ask_)
-            {
-                best_ask_ = scan_for_best_ask();
-            }
-        }
+        remove_order_impl<ASK>(tick_value, std::forward<U>(order));
     }
 
     order_type get_order(id_type id) const
@@ -775,16 +496,342 @@ public:
         return (index < 0) ? tick_type_strong::no_value() : index_to_tick(static_cast<size_type>(index));
     }
 
-    template <bool is_bid>
+    template <Side BookSide>
     void update_bitsets(bool on, size_type index)
     {
-        if constexpr (is_bid)
+        if constexpr (BookSide == BID)
         {
             bid_bitmap_.set(index, on);
         }
         else
         {
             ask_bitmap_.set(index, on);
+        }
+    }
+
+    // Check if tick is within bounds according to policy
+    // Returns true if in bounds, false if out of bounds (discard policy)
+    // Asserts if out of bounds with assert policy
+    bool check_bounds_policy(tick_type_strong tick) const
+    {
+        if constexpr (is_bounds_discard_policy_v<BoundsPolicy>)
+        {
+            return tick <= MarketStats::daily_high_v && tick >= MarketStats::daily_low_v;
+        }
+        else
+        {
+            assert(tick <= MarketStats::daily_high_v && tick >= MarketStats::daily_low_v);
+            return true;
+        }
+    }
+
+    // Templated insert implementation for both bids and asks
+    template <Side OrderSide, typename U>
+    requires order<U> && std::same_as<order_type, std::decay_t<U>>
+    void insert_order_impl(tick_type tick_value, U&& order)
+    {
+        tick_type_strong tick_strong{tick_value};
+
+        auto volume = order_volume_getter(order);
+        auto order_id = order_id_getter(order);
+        auto [it, succ] = orders_.try_emplace(order_id, order_data{std::forward<U>(order)});
+
+        assert(succ && "Order ID already exists");
+
+        order_tick_setter(it->second.order, tick_strong.value());
+
+        // Check bounds - if out of bounds, keep in map but don't add to price levels
+        if (!check_bounds_policy(tick_strong))
+            return;
+
+        size_type index = tick_to_index(tick_strong);
+        auto& levels = (OrderSide == BID) ? bids_ : asks_;
+        auto& best_price = (OrderSide == BID) ? best_bid_ : best_ask_;
+
+        levels[index].volume += volume;
+
+        // If FIFO is enabled, add this order to the back of the queue for this price level
+        if constexpr (is_fifo_enabled)
+        {
+            auto node_lookup = make_node_lookup();
+            levels[index].storage.queue.push_back(order_id, node_lookup);
+        }
+
+        if constexpr (OrderSide == BID)
+        {
+            if (!best_price.has_value() || tick_strong > best_price)
+                best_price = tick_strong;
+        }
+        else
+        {
+            if (!best_price.has_value() || tick_strong < best_price)
+                best_price = tick_strong;
+        }
+
+        update_bitsets<OrderSide>(true, index);
+    }
+
+    // Templated remove implementation for both bids and asks
+    template <Side OrderSide, typename U>
+    requires order<U> && std::same_as<order_type, std::decay_t<U>>
+    void remove_order_impl(tick_type tick_value, U&& order)
+    {
+        tick_type_strong tick_strong{tick_value};
+
+        const auto order_id = order_id_getter(order);
+        auto it = orders_.find(order_id);
+        assert(it != orders_.end());
+
+        auto& order_entry = it->second;
+        auto original_volume = order_volume_getter(order_entry.order);
+
+        // Check bounds - if out of bounds, just remove from map
+        if (!check_bounds_policy(tick_strong))
+        {
+            orders_.erase(it);
+            return;
+        }
+
+        size_type index = tick_to_index(tick_strong);
+        auto& levels = (OrderSide == BID) ? bids_ : asks_;
+        auto& best_price = (OrderSide == BID) ? best_bid_ : best_ask_;
+
+        // Remove from FIFO queue before erasing from map
+        if constexpr (is_fifo_enabled)
+        {
+            auto& node = order_entry.fifo_node;
+            if (node.in_queue)
+            {
+                auto node_lookup = make_node_lookup();
+                levels[index].storage.queue.erase(order_id, node_lookup);
+            }
+        }
+
+        orders_.erase(it);
+
+        levels[index].volume -= original_volume;
+
+        if (levels[index].volume == 0)
+        {
+            update_bitsets<OrderSide>(false, index);
+
+            if (best_price.has_value() && tick_strong == best_price)
+            {
+                if constexpr (OrderSide == BID)
+                    best_price = scan_for_best_bid();
+                else
+                    best_price = scan_for_best_ask();
+            }
+        }
+    }
+
+    // Templated update implementation for both bids and asks
+    template <Side OrderSide, typename U>
+    requires order<U> && std::same_as<order_type, std::decay_t<U>>
+    void update_order_impl(tick_type tick_value, U&& order)
+    {
+        tick_type_strong tick_strong{tick_value};
+
+        auto order_id = order_id_getter(order);
+        auto it = orders_.find(order_id);
+        assert(it != orders_.end());
+
+        auto& order_entry = it->second;
+        auto& stored_order = order_entry.order;
+
+        auto original_tick = tick_type_strong(order_tick_getter(stored_order));
+        auto original_volume = order_volume_getter(stored_order);
+        auto supplied_volume = order_volume_getter(order);
+
+        order_volume_setter(stored_order, supplied_volume);
+        order_tick_setter(stored_order, tick_strong.value());
+
+        // Check bounds for both old and new prices
+        bool original_out_of_bounds = false;
+        bool new_out_of_bounds = false;
+
+        if constexpr (is_bounds_discard_policy_v<BoundsPolicy>)
+        {
+            original_out_of_bounds = (original_tick > MarketStats::daily_high_v || original_tick < MarketStats::daily_low_v);
+            new_out_of_bounds = (tick_strong > MarketStats::daily_high_v || tick_strong < MarketStats::daily_low_v);
+
+            // If both out of bounds, just update stored order and return
+            if (original_out_of_bounds && new_out_of_bounds)
+                return;
+        }
+        else
+            assert(tick_strong <= MarketStats::daily_high_v && tick_strong >= MarketStats::daily_low_v);
+
+
+        const bool price_changed = (tick_strong != original_tick);
+        auto& levels = (OrderSide == BID) ? bids_ : asks_;
+        auto& best_price = (OrderSide == BID) ? best_bid_ : best_ask_;
+
+        // Handle bounds transitions with discard policy
+        if constexpr (is_bounds_discard_policy_v<BoundsPolicy>)
+        {
+            // Case: was out-of-bounds, now in-bounds (behave like insert)
+            if (original_out_of_bounds && !new_out_of_bounds)
+            {
+                size_type new_index = tick_to_index(tick_strong);
+                levels[new_index].volume += supplied_volume;
+
+                if constexpr (is_fifo_enabled)
+                {
+                    if (supplied_volume != 0)
+                    {
+                        auto node_lookup = make_node_lookup();
+                        levels[new_index].storage.queue.push_back(order_id, node_lookup);
+                    }
+                }
+
+                if constexpr (OrderSide == BID)
+                {
+                    if (!best_price.has_value() || tick_strong > best_price)
+                        best_price = tick_strong;
+                }
+                else
+                {
+                    if (!best_price.has_value() || tick_strong < best_price)
+                        best_price = tick_strong;
+                }
+
+                update_bitsets<OrderSide>(true, new_index);
+                return;
+            }
+
+            // Case: was in-bounds, now out-of-bounds (behave like remove from price levels)
+            if (!original_out_of_bounds && new_out_of_bounds)
+            {
+                size_type old_index = tick_to_index(original_tick);
+
+                if constexpr (is_fifo_enabled)
+                {
+                    auto& node = order_entry.fifo_node;
+                    if (node.in_queue)
+                    {
+                        auto node_lookup = make_node_lookup();
+                        levels[old_index].storage.queue.erase(order_id, node_lookup);
+                    }
+                }
+
+                levels[old_index].volume -= original_volume;
+
+                if (levels[old_index].volume == 0)
+                {
+                    update_bitsets<OrderSide>(false, old_index);
+
+                    if (best_price.has_value() && original_tick == best_price)
+                    {
+                        if constexpr (OrderSide == BID)
+                            best_price = scan_for_best_bid();
+                        else
+                            best_price = scan_for_best_ask();
+                    }
+                }
+                return;
+            }
+        }
+
+        // Normal case: both in-bounds (or assert policy)
+        const make_signed_volume_t<volume_type> volume_delta =
+            static_cast<make_signed_volume_t<volume_type>>(supplied_volume) -
+            static_cast<make_signed_volume_t<volume_type>>(original_volume);
+        const size_type old_index = tick_to_index(original_tick);
+        const size_type new_index = tick_to_index(tick_strong);
+
+        // Update old price level
+        const auto signed_original = static_cast<make_signed_volume_t<volume_type>>(original_volume);
+        const auto volume_adjustment = price_changed ? -signed_original : volume_delta;
+        levels[old_index].volume = static_cast<volume_type>(
+            static_cast<make_signed_volume_t<volume_type>>(levels[old_index].volume) + volume_adjustment);
+        update_bitsets<OrderSide>(levels[old_index].volume != 0, old_index);
+
+        // Handle zero volume based on policy
+        if constexpr (is_zero_volume_delete_policy_v<ZeroVolumePolicy>)
+        {
+            if (supplied_volume == 0)
+            {
+                // Delete policy: remove from FIFO queue and erase from orders map
+                if constexpr (is_fifo_enabled)
+                {
+                    auto& node = order_entry.fifo_node;
+                    if (node.in_queue)
+                    {
+                        auto node_lookup = make_node_lookup();
+                        levels[old_index].storage.queue.erase(order_id, node_lookup);
+                    }
+                }
+                orders_.erase(it);
+
+                // Update best price if needed
+                if (levels[old_index].volume == 0 && original_tick == best_price)
+                {
+                    if constexpr (OrderSide == BID)
+                        best_price = scan_for_best_bid();
+                    else
+                        best_price = scan_for_best_ask();
+                }
+                return;
+            }
+        }
+
+        // Handle FIFO queue for old level
+        if constexpr (is_fifo_enabled)
+        {
+            auto& node = order_entry.fifo_node;
+            auto node_lookup = make_node_lookup();
+            if (price_changed)
+            {
+                if (node.in_queue)
+                {
+                    levels[old_index].storage.queue.erase(order_id, node_lookup);
+                }
+            }
+            else if (volume_delta > 0)
+            {
+                levels[old_index].storage.queue.move_to_back(order_id, node_lookup);
+            }
+        }
+
+        // Update new price level only if price changed
+        if (price_changed)
+        {
+            levels[new_index].volume += supplied_volume;
+            update_bitsets<OrderSide>(levels[new_index].volume != 0, new_index);
+
+            if constexpr (is_fifo_enabled)
+            {
+                if (supplied_volume != 0)
+                {
+                    auto node_lookup = make_node_lookup();
+                    levels[new_index].storage.queue.push_back(order_id, node_lookup);
+                }
+            }
+        }
+
+        // Update best price
+        if constexpr (OrderSide == BID)
+        {
+            if (price_changed && tick_strong > best_price)
+            {
+                best_price = tick_strong;
+            }
+            else if (levels[old_index].volume == 0 && original_tick == best_price)
+            {
+                best_price = scan_for_best_bid();
+            }
+        }
+        else
+        {
+            if (price_changed && tick_strong < best_price)
+            {
+                best_price = tick_strong;
+            }
+            else if (levels[old_index].volume == 0 && original_tick == best_price)
+            {
+                best_price = scan_for_best_ask();
+            }
         }
     }
 

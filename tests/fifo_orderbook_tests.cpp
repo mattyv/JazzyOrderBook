@@ -5,6 +5,8 @@
 using test_market_stats = jazzy::market_statistics<int, 130, 90, 110, 2000>;
 using fifo_storage = jazzy::detail::fifo_level_storage<jazzy::tests::order>;
 using FifoOrderBook = jazzy::order_book<int, jazzy::tests::order, test_market_stats, fifo_storage>;
+using FifoOrderBookDeletePolicy = jazzy::order_book<int, jazzy::tests::order, test_market_stats, fifo_storage, jazzy::detail::zero_volume_as_delete_policy>;
+using FifoOrderBookValidPolicy = jazzy::order_book<int, jazzy::tests::order, test_market_stats, fifo_storage, jazzy::detail::zero_volume_as_valid_policy>;
 
 SCENARIO("FIFO order book maintains order queue at each price level", "[orderbook][fifo]")
 {
@@ -140,11 +142,11 @@ SCENARIO("FIFO order book handles order removal correctly", "[orderbook][fifo]")
     }
 }
 
-SCENARIO("FIFO order book removes zero-volume orders from queue", "[orderbook][fifo]")
+SCENARIO("FIFO order book with delete policy removes zero-volume orders", "[orderbook][fifo][policy]")
 {
-    GIVEN("A FIFO order book with a single bid order")
+    GIVEN("A FIFO order book with delete policy and a single bid order")
     {
-        FifoOrderBook book{};
+        FifoOrderBookDeletePolicy book{};
         book.insert_bid(100, jazzy::tests::order{.order_id = 1, .volume = 10});
 
         WHEN("The order volume is updated to zero and a new order arrives at the same price")
@@ -157,6 +159,60 @@ SCENARIO("FIFO order book removes zero-volume orders from queue", "[orderbook][f
                 auto front = book.front_order_at_bid_level(0);
                 REQUIRE(front.order_id == 2);
                 REQUIRE(front.volume == 5);
+            }
+
+            THEN("The price level volume should only reflect the remaining order")
+            {
+                REQUIRE(book.bid_volume_at_tick(100) == 5);
+            }
+        }
+    }
+}
+
+SCENARIO("FIFO order book with valid policy keeps zero-volume orders", "[orderbook][fifo][policy]")
+{
+    GIVEN("A FIFO order book with valid policy and a single bid order")
+    {
+        FifoOrderBookValidPolicy book{};
+        book.insert_bid(100, jazzy::tests::order{.order_id = 1, .volume = 10});
+
+        WHEN("The order volume is updated to zero")
+        {
+            book.update_bid(100, jazzy::tests::order{.order_id = 1, .volume = 0});
+
+            THEN("The order should remain in the book with zero volume")
+            {
+                auto order = book.get_order(1);
+                REQUIRE(order.order_id == 1);
+                REQUIRE(order.volume == 0);
+            }
+
+            THEN("The price level volume should be zero")
+            {
+                REQUIRE(book.bid_volume_at_tick(100) == 0);
+            }
+
+            THEN("Best bid should be empty since all orders have zero volume")
+            {
+                REQUIRE(book.best_bid() == std::numeric_limits<int>::min());
+            }
+        }
+
+        WHEN("Volume is updated to zero then back to non-zero at the same price")
+        {
+            book.update_bid(100, jazzy::tests::order{.order_id = 1, .volume = 0});
+            book.update_bid(100, jazzy::tests::order{.order_id = 1, .volume = 15});
+
+            THEN("The order should still be in the queue with updated volume")
+            {
+                auto front = book.front_order_at_bid_level(0);
+                REQUIRE(front.order_id == 1);
+                REQUIRE(front.volume == 15);
+            }
+
+            THEN("The price level volume should reflect the update")
+            {
+                REQUIRE(book.bid_volume_at_tick(100) == 15);
             }
         }
     }

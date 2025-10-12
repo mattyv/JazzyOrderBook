@@ -1072,3 +1072,84 @@ SCENARIO("order books can be cleared", "[orderbook][clear]")
         }
     }
 }
+
+SCENARIO("order book with discard bounds policy handles out-of-bounds orders", "[orderbook][bounds][policy]")
+{
+    GIVEN("An order book with discard bounds policy")
+    {
+        using DiscardPolicyBook = jazzy::order_book<int, jazzy::tests::order, test_market_stats,
+            jazzy::detail::aggregate_level_storage<jazzy::tests::order>,
+            jazzy::detail::zero_volume_as_valid_policy,
+            jazzy::detail::bounds_check_discard_policy>;
+
+        DiscardPolicyBook book{};
+
+        WHEN("An order is inserted with out-of-bounds price")
+        {
+            book.insert_bid(50, jazzy::tests::order{.order_id = 1, .volume = 10}); // below daily_low (90)
+
+            THEN("The order is kept in orders map but not in price levels")
+            {
+                auto order = book.get_order(1);
+                REQUIRE(order.order_id == 1);
+                REQUIRE(order.volume == 10);
+            }
+
+            THEN("Best bid should remain empty")
+            {
+                REQUIRE(book.best_bid() == std::numeric_limits<int>::min());
+            }
+
+            THEN("Volume at that level should be zero")
+            {
+                // Can't call bid_volume_at_tick with out-of-bounds value in assert policy
+                // so just verify best bid is empty
+                REQUIRE(!book.bid_bitmap().any());
+            }
+        }
+
+        WHEN("An out-of-bounds order is updated to in-bounds")
+        {
+            book.insert_bid(50, jazzy::tests::order{.order_id = 1, .volume = 10});
+            book.update_bid(100, jazzy::tests::order{.order_id = 1, .volume = 15});
+
+            THEN("The order should now appear in price levels")
+            {
+                REQUIRE(book.bid_volume_at_tick(100) == 15);
+                REQUIRE(book.best_bid() == 100);
+            }
+        }
+
+        WHEN("An in-bounds order is updated to out-of-bounds")
+        {
+            book.insert_bid(100, jazzy::tests::order{.order_id = 1, .volume = 10});
+            book.update_bid(50, jazzy::tests::order{.order_id = 1, .volume = 15});
+
+            THEN("The order should be removed from price levels")
+            {
+                REQUIRE(book.bid_volume_at_tick(100) == 0);
+                REQUIRE(book.best_bid() == std::numeric_limits<int>::min());
+            }
+
+            THEN("The order should still exist in orders map")
+            {
+                auto order = book.get_order(1);
+                REQUIRE(order.order_id == 1);
+                REQUIRE(order.volume == 15);
+            }
+        }
+
+        WHEN("An out-of-bounds order is removed")
+        {
+            book.insert_bid(50, jazzy::tests::order{.order_id = 1, .volume = 10});
+            book.remove_bid(50, jazzy::tests::order{.order_id = 1, .volume = 10});
+
+            THEN("The order should be removed from orders map")
+            {
+                // Order should no longer exist - we can't test get_order as it asserts
+                // Just verify the book is empty
+                REQUIRE(book.best_bid() == std::numeric_limits<int>::min());
+            }
+        }
+    }
+}

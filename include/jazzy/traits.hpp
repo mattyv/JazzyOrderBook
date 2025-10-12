@@ -118,4 +118,40 @@ struct is_fifo_storage<detail::fifo_level_storage<OrderType>> : std::true_type
 template <typename T>
 inline constexpr bool is_fifo_storage_v = is_fifo_storage<T>::value;
 
+// Forward declare zero volume policies
+namespace detail {
+struct zero_volume_as_delete_policy;
+struct zero_volume_as_valid_policy;
+} // namespace detail
+
+// Type trait to detect if zero volume should delete orders
+template <typename T>
+struct is_zero_volume_delete_policy : std::false_type
+{};
+
+template <>
+struct is_zero_volume_delete_policy<detail::zero_volume_as_delete_policy> : std::true_type
+{};
+
+template <typename T>
+inline constexpr bool is_zero_volume_delete_policy_v = is_zero_volume_delete_policy<T>::value;
+
+// Forward declare bounds check policies
+namespace detail {
+struct bounds_check_assert_policy;
+struct bounds_check_discard_policy;
+} // namespace detail
+
+// Type trait to detect if out-of-bounds orders should be discarded
+template <typename T>
+struct is_bounds_discard_policy : std::false_type
+{};
+
+template <>
+struct is_bounds_discard_policy<detail::bounds_check_discard_policy> : std::true_type
+{};
+
+template <typename T>
+inline constexpr bool is_bounds_discard_policy_v = is_bounds_discard_policy<T>::value;
+
 } // namespace jazzy
