@@ -140,6 +140,28 @@ SCENARIO("FIFO order book handles order removal correctly", "[orderbook][fifo]")
     }
 }
 
+SCENARIO("FIFO order book removes zero-volume orders from queue", "[orderbook][fifo]")
+{
+    GIVEN("A FIFO order book with a single bid order")
+    {
+        FifoOrderBook book{};
+        book.insert_bid(100, jazzy::tests::order{.order_id = 1, .volume = 10});
+
+        WHEN("The order volume is updated to zero and a new order arrives at the same price")
+        {
+            book.update_bid(100, jazzy::tests::order{.order_id = 1, .volume = 0});
+            book.insert_bid(100, jazzy::tests::order{.order_id = 2, .volume = 5});
+
+            THEN("The queue front should reflect the new live order")
+            {
+                auto front = book.front_order_at_bid_level(0);
+                REQUIRE(front.order_id == 2);
+                REQUIRE(front.volume == 5);
+            }
+        }
+    }
+}
+
 SCENARIO("FIFO order book handles price level changes", "[orderbook][fifo]")
 {
     GIVEN("A FIFO order book with orders at different prices")

@@ -2,8 +2,19 @@
 
 #include "traits.hpp"
 #include <limits>
+#include <type_traits>
 
 namespace jazzy {
+
+// Helper to get the signed version of a volume type
+// For unsigned integral types, convert to signed
+// For signed types (including floating-point), keep as-is
+template <typename T>
+using make_signed_volume_t = std::conditional_t<
+    std::is_signed<T>::value || std::is_floating_point<T>::value,
+    T,
+    std::make_signed_t<T>
+>;
 
 template <typename TickType>
 requires tick<TickType>
