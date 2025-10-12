@@ -667,6 +667,68 @@ public:
         auto& levels = (OrderSide == BID) ? bids_ : asks_;
         auto& best_price = (OrderSide == BID) ? best_bid_ : best_ask_;
 
+        const auto ensure_best_price_on_add = [&](tick_type_strong price) {
+            if constexpr (OrderSide == BID)
+            {
+                if (!best_price.has_value() || price > best_price)
+                    best_price = price;
+            }
+            else
+            {
+                if (!best_price.has_value() || price < best_price)
+                    best_price = price;
+            }
+        };
+
+        const auto refresh_best_if_empty = [&](tick_type_strong price, size_type index) {
+            if (levels[index].volume == 0 && best_price.has_value() && price == best_price)
+            {
+                if constexpr (OrderSide == BID)
+                    best_price = scan_for_best_bid();
+                else
+                    best_price = scan_for_best_ask();
+            }
+        };
+
+        const auto sync_bitset = [&](size_type index) {
+            update_bitsets<OrderSide>(levels[index].volume != 0, index);
+        };
+
+        const auto remove_from_fifo = [&](size_type index) {
+            if constexpr (is_fifo_enabled)
+            {
+                auto& node = order_entry.fifo_node;
+                if (node.in_queue)
+                {
+                    auto node_lookup = make_node_lookup();
+                    levels[index].storage.queue.erase(order_id, node_lookup);
+                }
+            }
+        };
+
+        const auto push_to_fifo = [&](size_type index) {
+            if constexpr (is_fifo_enabled)
+            {
+                if (supplied_volume != 0)
+                {
+                    auto node_lookup = make_node_lookup();
+                    levels[index].storage.queue.push_back(order_id, node_lookup);
+                }
+            }
+        };
+
+        const auto move_fifo_to_back = [&](size_type index) {
+            if constexpr (is_fifo_enabled)
+            {
+                auto& node = order_entry.fifo_node;
+                if (node.in_queue)
+                {
+                    auto node_lookup = make_node_lookup();
+                    levels[index].storage.queue.move_to_back(order_id, node_lookup);
+                }
+            }
+        };
+
         // Handle bounds transitions with discard policy
         if constexpr (is_bounds_discard_policy_v<BoundsPolicy>)
         {
@@ -676,27 +738,9 @@ public:
                 size_type new_index = tick_to_index(tick_strong);
                 levels[new_index].volume += supplied_volume;
 
-                if constexpr (is_fifo_enabled)
-                {
-                    if (supplied_volume != 0)
-                    {
-                        auto node_lookup = make_node_lookup();
-                        levels[new_index].storage.queue.push_back(order_id, node_lookup);
-                    }
-                }
-
-                if constexpr (OrderSide == BID)
-                {
-                    if (!best_price.has_value() || tick_strong > best_price)
-                        best_price = tick_strong;
-                }
-                else
-                {
-                    if (!best_price.has_value() || tick_strong < best_price)
-                        best_price = tick_strong;
-                }
-
-                update_bitsets<OrderSide>(true, new_index);
+                sync_bitset(new_index);
+                push_to_fifo(new_index);
+                ensure_best_price_on_add(tick_strong);
                 return;
             }
 
@@ -705,30 +749,10 @@ public:
             {
                 size_type old_index = tick_to_index(original_tick);
 
-                if constexpr (is_fifo_enabled)
-                {
-                    auto& node = order_entry.fifo_node;
-                    if (node.in_queue)
-                    {
-                        auto node_lookup = make_node_lookup();
-                        levels[old_index].storage.queue.erase(order_id, node_lookup);
-                    }
-                }
-
+                remove_from_fifo(old_index);
                 levels[old_index].volume -= original_volume;
-
-                if (levels[old_index].volume == 0)
-                {
-                    update_bitsets<OrderSide>(false, old_index);
-
-                    if (best_price.has_value() && original_tick == best_price)
-                    {
-                        if constexpr (OrderSide == BID)
-                            best_price = scan_for_best_bid();
-                        else
-                            best_price = scan_for_best_ask();
-                    }
-                }
+                sync_bitset(old_index);
+                refresh_best_if_empty(original_tick, old_index);
                 return;
             }
         }
@@ -745,7 +769,7 @@ public:
         const auto volume_adjustment = price_changed ? -signed_original : volume_delta;
         levels[old_index].volume = static_cast<volume_type>(
             static_cast<make_signed_volume_t<volume_type>>(levels[old_index].volume) + volume_adjustment);
-        update_bitsets<OrderSide>(levels[old_index].volume != 0, old_index);
+        sync_bitset(old_index);
 
         // Handle zero volume based on policy
         if constexpr (is_zero_volume_delete_policy_v<ZeroVolumePolicy>)
@@ -753,25 +777,11 @@ public:
             if (supplied_volume == 0)
             {
                 // Delete policy: remove from FIFO queue and erase from orders map
-                if constexpr (is_fifo_enabled)
-                {
-                    auto& node = order_entry.fifo_node;
-                    if (node.in_queue)
-                    {
-                        auto node_lookup = make_node_lookup();
-                        levels[old_index].storage.queue.erase(order_id, node_lookup);
-                    }
-                }
+                remove_from_fifo(old_index);
                 orders_.erase(it);
 
                 // Update best price if needed
-                if (levels[old_index].volume == 0 && original_tick == best_price)
-                {
-                    if constexpr (OrderSide == BID)
-                        best_price = scan_for_best_bid();
-                    else
-                        best_price = scan_for_best_ask();
-                }
+                refresh_best_if_empty(original_tick, old_index);
                 return;
             }
         }
@@ -779,18 +789,13 @@ public:
         // Handle FIFO queue for old level
         if constexpr (is_fifo_enabled)
         {
-            auto& node = order_entry.fifo_node;
-            auto node_lookup = make_node_lookup();
             if (price_changed)
             {
-                if (node.in_queue)
-                {
-                    levels[old_index].storage.queue.erase(order_id, node_lookup);
-                }
+                remove_from_fifo(old_index);
             }
             else if (volume_delta > 0)
             {
-                levels[old_index].storage.queue.move_to_back(order_id, node_lookup);
+                move_fifo_to_back(old_index);
             }
         }
 
@@ -798,41 +803,12 @@ public:
         if (price_changed)
         {
             levels[new_index].volume += supplied_volume;
-            update_bitsets<OrderSide>(levels[new_index].volume != 0, new_index);
-
-            if constexpr (is_fifo_enabled)
-            {
-                if (supplied_volume != 0)
-                {
-                    auto node_lookup = make_node_lookup();
-                    levels[new_index].storage.queue.push_back(order_id, node_lookup);
-                }
-            }
+            sync_bitset(new_index);
+            push_to_fifo(new_index);
+            ensure_best_price_on_add(tick_strong);
         }
 
-        // Update best price
-        if constexpr (OrderSide == BID)
-        {
-            if (price_changed && tick_strong > best_price)
-            {
-                best_price = tick_strong;
-            }
-            else if (levels[old_index].volume == 0 && original_tick == best_price)
-            {
-                best_price = scan_for_best_bid();
-            }
-        }
-        else
-        {
-            if (price_changed && tick_strong < best_price)
-            {
-                best_price = tick_strong;
-            }
-            else if (levels[old_index].volume == 0 && original_tick == best_price)
-            {
-                best_price = scan_for_best_ask();
-            }
-        }
+        refresh_best_if_empty(original_tick, old_index);
     }
 
     template <typename LevelContainer>
