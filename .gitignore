@@ -59,3 +59,26 @@ __pycache__/
 
 # Benchmark visualization outputs
 benchmark_results/*.json
+
+# CMake/Ninja build artifacts (when configuring in-tree)
+CMakeCache.txt
+CMakeFiles/
+CTestTestfile.cmake
+Makefile
+cmake_install.cmake
+_deps/
+
+benchmarks/CMakeFiles/
+benchmarks/CTestTestfile.cmake
+benchmarks/Makefile
+benchmarks/cmake_install.cmake
+
+external/CMakeFiles/
+external/CTestTestfile.cmake
+external/Makefile
+external/cmake_install.cmake
+
+tests/CMakeFiles/
+tests/CTestTestfile.cmake
+tests/Makefile
+tests/cmake_install.cmake

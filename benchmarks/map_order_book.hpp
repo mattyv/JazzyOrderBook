@@ -97,8 +97,12 @@ public:
 
         if (tick_value == original_tick)
         {
-            auto volume_delta = supplied_volume - original_volume;
-            bids_[tick_value].volume += volume_delta;
+            // Use signed arithmetic to handle both increases and decreases safely
+            const make_signed_volume_t<volume_type> volume_delta =
+                static_cast<make_signed_volume_t<volume_type>>(supplied_volume) -
+                static_cast<make_signed_volume_t<volume_type>>(original_volume);
+            bids_[tick_value].volume = static_cast<volume_type>(
+                static_cast<make_signed_volume_t<volume_type>>(bids_[tick_value].volume) + volume_delta);
 
             // Remove level if volume reaches zero
             if (bids_[tick_value].volume == 0)
@@ -154,8 +158,12 @@ public:
 
         if (tick_value == original_tick)
         {
-            auto volume_delta = supplied_volume - original_volume;
-            asks_[tick_value].volume += volume_delta;
+            // Use signed arithmetic to handle both increases and decreases safely
+            const make_signed_volume_t<volume_type> volume_delta =
+                static_cast<make_signed_volume_t<volume_type>>(supplied_volume) -
+                static_cast<make_signed_volume_t<volume_type>>(original_volume);
+            asks_[tick_value].volume = static_cast<volume_type>(
+                static_cast<make_signed_volume_t<volume_type>>(asks_[tick_value].volume) + volume_delta);
 
             // Remove level if volume reaches zero
             if (asks_[tick_value].volume == 0)
@@ -243,14 +251,14 @@ public:
         }
     }
 
-    volume_type bid_volume_at_tick(tick_type tick_value)
+    volume_type bid_volume_at_tick(tick_type tick_value) const
     {
         assert(tick_value <= MarketStats::daily_high_v.value() && tick_value >= MarketStats::daily_low_v.value());
         auto it = bids_.find(tick_value);
         return (it != bids_.end()) ? it->second.volume : 0;
     }
 
-    volume_type ask_volume_at_tick(tick_type tick_value)
+    volume_type ask_volume_at_tick(tick_type tick_value) const
     {
         assert(tick_value <= MarketStats::daily_high_v.value() && tick_value >= MarketStats::daily_low_v.value());
         auto it = asks_.find(tick_value);

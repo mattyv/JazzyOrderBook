@@ -68,6 +68,18 @@ template <typename T>
 requires tick<T>
 using tick_type = T;
 
+// Concept for volume types - must support arithmetic operations
+// Can be integral or floating-point
+template <typename T>
+concept volume = (std::integral<T> || std::floating_point<T>) && requires(T v1, T v2) {
+    { v1 + v2 } -> std::convertible_to<T>;
+    { v1 - v2 } -> std::convertible_to<T>;
+    { v1 += v2 } -> std::same_as<T&>;
+    { v1 -= v2 } -> std::same_as<T&>;
+    { v1 == T{} } -> std::convertible_to<bool>;
+    { v1 != T{} } -> std::convertible_to<bool>;
+};
+
 template <typename T>
 concept order = requires(T const& order) {
     { detail::order_id_getter{}(order) } -> std::same_as<order_id_type<T>>;
@@ -75,9 +87,7 @@ concept order = requires(T const& order) {
     { detail::order_tick_getter{}(order) } -> std::same_as<order_tick_type<T>>;
     { detail::order_volume_setter{}(std::declval<T&>(), std::declval<order_volume_type<T>>()) } -> std::same_as<void>;
     { detail::order_tick_setter{}(std::declval<T&>(), std::declval<order_tick_type<T>>()) } -> std::same_as<void>;
-    requires requires(order_volume_type<T> v1, order_volume_type<T> v2) {
-        { v1 + v2 } -> std::same_as<order_volume_type<T>>;
-    };
+    requires volume<order_volume_type<T>>;
     requires tick<order_tick_type<T>>;
 };
 

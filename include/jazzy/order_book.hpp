@@ -105,7 +105,15 @@ private:
         assert(expected_range >= 0.0 && "Expected range must be non-negative");
 
         const auto base_span = static_cast<double>((daily_high - daily_low).value());
-        const auto scaled_span = static_cast<size_type>(base_span * (1.0 + expected_range));
+        const auto scaled = base_span * (1.0 + expected_range);
+
+        // Overflow protection: cap at max size_type value
+        constexpr auto max_size = std::numeric_limits<size_type>::max();
+        if (scaled > static_cast<double>(max_size)) {
+            return max_size;
+        }
+
+        const auto scaled_span = static_cast<size_type>(scaled);
         const auto inclusive_span = static_cast<size_type>((daily_high - daily_low).value()) + 1;
         const size_type total_span = scaled_span < inclusive_span ? inclusive_span : scaled_span;
         assert(total_span > 0 && "Order book size must be positive for valid bitsets");
@@ -339,30 +347,51 @@ public:
         auto it = orders_.find(order_id);
         assert(it != orders_.end());
 
-        auto original_tick = tick_type_strong(order_tick_getter(it->second.order));
-        auto original_volume = order_volume_getter(it->second.order);
+        auto& order_entry = it->second;
+        auto& stored_order = order_entry.order;
+
+        auto original_tick = tick_type_strong(order_tick_getter(stored_order));
+        auto original_volume = order_volume_getter(stored_order);
         auto supplied_volume = order_volume_getter(order);
 
-        order_volume_setter(it->second.order, supplied_volume);
-        order_tick_setter(it->second.order, tick_strong.value());
+        order_volume_setter(stored_order, supplied_volume);
+        order_tick_setter(stored_order, tick_strong.value());
 
         // Compute common values unconditionally
         const bool price_changed = (tick_strong != original_tick);
-        const auto volume_delta = supplied_volume - original_volume;
+        // Use signed type for volume_delta to handle both increases and decreases safely
+        const make_signed_volume_t<volume_type> volume_delta =
+            static_cast<make_signed_volume_t<volume_type>>(supplied_volume) -
+            static_cast<make_signed_volume_t<volume_type>>(original_volume);
         const size_type old_index = tick_to_index(original_tick);
         const size_type new_index = tick_to_index(tick_strong);
 
         // Update old price level (common to both paths)
-        bids_[old_index].volume += price_changed ? -original_volume : volume_delta;
+        // Use signed arithmetic then convert back to volume_type to avoid underflow issues
+        const auto signed_original = static_cast<make_signed_volume_t<volume_type>>(original_volume);
+        const auto volume_adjustment = price_changed ? -signed_original : volume_delta;
+        bids_[old_index].volume = static_cast<volume_type>(
+            static_cast<make_signed_volume_t<volume_type>>(bids_[old_index].volume) + volume_adjustment);
         update_bitsets<true>(bids_[old_index].volume != 0, old_index);
 
         // Handle FIFO queue for old level
         if constexpr (is_fifo_enabled)
         {
+            auto& node = order_entry.fifo_node;
             auto node_lookup = make_node_lookup();
             if (price_changed)
             {
-                bids_[old_index].storage.queue.erase(order_id, node_lookup);
+                if (node.in_queue)
+                {
+                    bids_[old_index].storage.queue.erase(order_id, node_lookup);
+                }
+            }
+            else if (supplied_volume == 0)
+            {
+                if (node.in_queue)
+                {
+                    bids_[old_index].storage.queue.erase(order_id, node_lookup);
+                }
             }
             else if (volume_delta > 0)
             {
@@ -374,12 +403,15 @@ public:
         if (price_changed)
         {
             bids_[new_index].volume += supplied_volume;
-            update_bitsets<true>(true, new_index);
+            update_bitsets<true>(bids_[new_index].volume != 0, new_index);
 
             if constexpr (is_fifo_enabled)
             {
-                auto node_lookup = make_node_lookup();
-                bids_[new_index].storage.queue.push_back(order_id, node_lookup);
+                if (supplied_volume != 0)
+                {
+                    auto node_lookup = make_node_lookup();
+                    bids_[new_index].storage.queue.push_back(order_id, node_lookup);
+                }
             }
         }
 
@@ -405,30 +437,51 @@ public:
         auto it = orders_.find(order_id);
         assert(it != orders_.end());
 
-        auto original_tick = tick_type_strong(order_tick_getter(it->second.order));
-        auto original_volume = order_volume_getter(it->second.order);
+        auto& order_entry = it->second;
+        auto& stored_order = order_entry.order;
+
+        auto original_tick = tick_type_strong(order_tick_getter(stored_order));
+        auto original_volume = order_volume_getter(stored_order);
         auto supplied_volume = order_volume_getter(order);
 
-        order_volume_setter(it->second.order, supplied_volume);
-        order_tick_setter(it->second.order, tick_strong.value());
+        order_volume_setter(stored_order, supplied_volume);
+        order_tick_setter(stored_order, tick_strong.value());
 
         // Compute common values unconditionally
         const bool price_changed = (tick_strong != original_tick);
-        const auto volume_delta = supplied_volume - original_volume;
+        // Use signed type for volume_delta to handle both increases and decreases safely
+        const make_signed_volume_t<volume_type> volume_delta =
+            static_cast<make_signed_volume_t<volume_type>>(supplied_volume) -
+            static_cast<make_signed_volume_t<volume_type>>(original_volume);
         const size_type old_index = tick_to_index(original_tick);
         const size_type new_index = tick_to_index(tick_strong);
 
         // Update old price level (common to both paths)
-        asks_[old_index].volume += price_changed ? -original_volume : volume_delta;
+        // Use signed arithmetic then convert back to volume_type to avoid underflow issues
+        const auto signed_original = static_cast<make_signed_volume_t<volume_type>>(original_volume);
+        const auto volume_adjustment = price_changed ? -signed_original : volume_delta;
+        asks_[old_index].volume = static_cast<volume_type>(
+            static_cast<make_signed_volume_t<volume_type>>(asks_[old_index].volume) + volume_adjustment);
         update_bitsets<false>(asks_[old_index].volume != 0, old_index);
 
         // Handle FIFO queue for old level
         if constexpr (is_fifo_enabled)
         {
+            auto& node = order_entry.fifo_node;
             auto node_lookup = make_node_lookup();
             if (price_changed)
             {
-                asks_[old_index].storage.queue.erase(order_id, node_lookup);
+                if (node.in_queue)
+                {
+                    asks_[old_index].storage.queue.erase(order_id, node_lookup);
+                }
+            }
+            else if (supplied_volume == 0)
+            {
+                if (node.in_queue)
+                {
+                    asks_[old_index].storage.queue.erase(order_id, node_lookup);
+                }
             }
             else if (volume_delta > 0)
             {
@@ -440,12 +493,15 @@ public:
         if (price_changed)
         {
             asks_[new_index].volume += supplied_volume;
-            update_bitsets<false>(true, new_index);
+            update_bitsets<false>(asks_[new_index].volume != 0, new_index);
 
             if constexpr (is_fifo_enabled)
             {
-                auto node_lookup = make_node_lookup();
-                asks_[new_index].storage.queue.push_back(order_id, node_lookup);
+                if (supplied_volume != 0)
+                {
+                    auto node_lookup = make_node_lookup();
+                    asks_[new_index].storage.queue.push_back(order_id, node_lookup);
+                }
             }
         }
 
@@ -467,18 +523,24 @@ public:
         tick_type_strong tick_strong{tick_value};
         assert (tick_strong <= MarketStats::daily_high_v && tick_strong >= MarketStats::daily_low_v);
 
-        auto it = orders_.find(order_id_getter(order));
+        const auto order_id = order_id_getter(order);
+        auto it = orders_.find(order_id);
         assert(it != orders_.end());
 
-        auto original_volume = order_volume_getter(it->second.order);
+        auto& order_entry = it->second;
+        auto original_volume = order_volume_getter(order_entry.order);
 
         size_type index = tick_to_index(tick_strong);
 
         // Remove from FIFO queue before erasing from map
         if constexpr (is_fifo_enabled)
         {
-            auto node_lookup = make_node_lookup();
-            bids_[index].storage.queue.erase(order_id_getter(order), node_lookup);
+            auto& node = order_entry.fifo_node;
+            if (node.in_queue)
+            {
+                auto node_lookup = make_node_lookup();
+                bids_[index].storage.queue.erase(order_id, node_lookup);
+            }
         }
 
         orders_.erase(it);
@@ -503,18 +565,24 @@ public:
         tick_type_strong tick_strong{tick_value};
         assert (tick_strong <= MarketStats::daily_high_v && tick_strong >= MarketStats::daily_low_v);
 
-        auto it = orders_.find(order_id_getter(order));
+        const auto order_id = order_id_getter(order);
+        auto it = orders_.find(order_id);
         assert(it != orders_.end());
 
-        auto original_volume = order_volume_getter(it->second.order);
+        auto& order_entry = it->second;
+        auto original_volume = order_volume_getter(order_entry.order);
 
         size_type index = tick_to_index(tick_strong);
 
         // Remove from FIFO queue before erasing from map
         if constexpr (is_fifo_enabled)
         {
-            auto node_lookup = make_node_lookup();
-            asks_[index].storage.queue.erase(order_id_getter(order), node_lookup);
+            auto& node = order_entry.fifo_node;
+            if (node.in_queue)
+            {
+                auto node_lookup = make_node_lookup();
+                asks_[index].storage.queue.erase(order_id, node_lookup);
+            }
         }
 
         orders_.erase(it);
@@ -539,7 +607,7 @@ public:
         return it->second.order;
     }
 
-    volume_type bid_volume_at_tick(tick_type tick_value)
+    volume_type bid_volume_at_tick(tick_type tick_value) const
     {
         tick_type_strong tick_strong{tick_value};
         assert(tick_strong <= MarketStats::daily_high_v && tick_strong >= MarketStats::daily_low_v);
@@ -548,7 +616,7 @@ public:
         return bids_[index].volume;
     }
 
-    volume_type ask_volume_at_tick(tick_type tick_value)
+    volume_type ask_volume_at_tick(tick_type tick_value) const
     {
         tick_type_strong tick_strong{tick_value};
         assert(tick_strong <= MarketStats::daily_high_v && tick_strong >= MarketStats::daily_low_v);
