@@ -48,6 +48,7 @@ benchmark_results/*_new.txt
 
 # IDE configuration
 .vscode/
+.claude/
 
 # CTest output
 Testing/
